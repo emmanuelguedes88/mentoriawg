@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mentoria Wanessa Guedes</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; overflow: hidden; background-color: #020617; color: #e2e8f0; }
+        
+        .glass-panel { background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-panel-hover:hover { background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(139, 92, 246, 0.5); box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
+        .glass-input { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.15); color: white; transition: all 0.3s ease; }
+        .glass-input:focus { outline: none; border-color: rgba(139, 92, 246, 0.7); box-shadow: 0 0 15px rgba(139, 92, 246, 0.4); background: rgba(0, 0, 0, 0.6); }
+        .neon-text { text-shadow: 0 0 15px rgba(167, 139, 250, 0.6), 0 0 30px rgba(167, 139, 250, 0.4); }
+        
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.4); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(167, 139, 250, 0.8); }
+        
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+
+        @keyframes expandDown { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 200px; } }
+        .animate-expand { animation: expandDown 0.4s ease-out forwards; overflow: hidden; }
+
+        /* Estilo Lúdico Mapas Mentais */
+        .mindmap-node { position: relative; z-index: 10; transition: transform 0.3s, box-shadow 0.3s; }
+        .mindmap-node:hover { transform: translateY(-3px); }
+        
+        @keyframes flowLine { 0% { stroke-dashoffset: 24; } 100% { stroke-dashoffset: 0; } }
+        .path-flow { stroke-dasharray: 6; animation: flowLine 1s linear infinite; }
+        
+        .mindmap-line-v { position: absolute; width: 2px; background: linear-gradient(to bottom, var(--glow-color), transparent); left: 50%; transform: translateX(-50%); z-index: 1; }
+        .mindmap-line-h { position: absolute; height: 2px; background: linear-gradient(to right, transparent, var(--glow-color), transparent); top: 32px; z-index: 1; }
+    </style>
+</head>
+<body>
+
+    <div id="bg-carousel" class="absolute inset-0 z-[-1] overflow-hidden bg-slate-950"></div>
+    <div class="absolute inset-0 bg-slate-950/85 z-0 mix-blend-multiply pointer-events-none"></div>
+    <div class="absolute top-0 left-[-10%] w-[300px] h-[300px] md:w-[500px] md:h-[500px] bg-violet-600/20 rounded-full blur-[100px] md:blur-[150px] pointer-events-none fixed z-0"></div>
+    <div class="absolute bottom-0 right-[-10%] w-[300px] h-[300px] md:w-[500px] md:h-[500px] bg-cyan-600/20 rounded-full blur-[100px] md:blur-[150px] pointer-events-none fixed z-0"></div>
+
+    <div id="app-root" class="relative z-10 h-screen w-full overflow-hidden"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, updateDoc, addDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDBuOiA3jNQqNYhASP9ncCqjP6ngzJ61TY",
+            authDomain: "mentoriawg.firebaseapp.com",
+            projectId: "mentoriawg",
+            storageBucket: "mentoriawg.firebasestorage.app",
+            messagingSenderId: "112550898338",
+            appId: "1:112550898338:web:4ca6ce3e74280b56f045fb"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const teacherImage = "Screenshot_20260314_101001_Instagram.jpg";
+        const fallbackImage = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80";
+        const bgImages = [
+            "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1920&q=80", 
+            "https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=1920&q=80", 
+            "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=1920&q=80"
+        ];
+        const daysMap = [
+            { key: 'dom', label: 'Dom', index: 0 }, { key: 'seg', label: 'Seg', index: 1 }, 
+            { key: 'ter', label: 'Ter', index: 2 }, { key: 'qua', label: 'Qua', index: 3 },
+            { key: 'qui', label: 'Qui', index: 4 }, { key: 'sex', label: 'Sex', index: 5 }, { key: 'sab', label: 'Sáb', index: 6 }
+        ];
+
+        const LOADER_SVG = `<svg class="animate-spin w-5 h-5 mx-auto text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+        window.App = {
+            state: {
+                user: null,
+                userData: null,
+                loading: true,
+                authView: 'select',
+                authError: '',
+                platformLogo: localStorage.getItem('customPlatformLogo') || null,
+                
+                activeTab: 'dashboard',
+                isMenuOpen: false,
+                
+                students: [],
+                classes: [],
+                selectedStudentId: null,
+                
+                schedule: { seg: 4, ter: 4, qua: 4, qui: 4, sex: 4, sab: 6, dom: 0 },
+                regAvatarUrl: null,
+                
+                editingClassId: null,
+                confirmDeleteClassId: null,
+
+                lastTypedEmail: '',
+                lastTypedPw: '',
+
+                activeTaskInputId: null, 
+                
+                // MENTORA: Controle do Editor de Cronograma
+                editalForms: [{ id: Date.now(), name: '', content: '' }],
+                parsedBlocks: null,
+                
+                // CONTROLE DE SEGURANÇA PARA DELETAR SEM BUG
+                confirmDeleteId: null,
+                
+                isCardFlipped: false,
+                expandedMindMapId: null,
+                
+                activeTimerId: null,
+                activeTimerSeconds: 0,
+                timerIntervalObj: null
+            },
+            unsubs: [],
+
+            init: function() {
+                this.initCarousel();
+                
+                onAuthStateChanged(auth, (user) => {
+                    this.state.user = user;
+                    this.clearUnsubs();
+                    
+                    if (user) {
+                        const docRef = doc(db, 'users', user.uid);
+                        const unsub = onSnapshot(docRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                this.state.userData = { id: docSnap.id, ...docSnap.data() };
+                                
+                                if(!this.state.userData.flashcards) this.state.userData.flashcards = [];
+                                if(!this.state.userData.dailyCardLimit) this.state.userData.dailyCardLimit = 10;
+                                
+                                this.loadData();
+                            } else {
+                                this.state.userData = null;
+                            }
+                            this.state.loading = false;
+                            this.render();
+                        }, (err) => { 
+                            console.error(err); 
+                            this.state.loading = false; 
+                            this.render(); 
+                        });
+                        this.unsubs.push(unsub);
+                    } else {
+                        this.state.userData = null;
+                        this.state.loading = false;
+                        this.render();
+                    }
+                });
+            },
+
+            clearUnsubs: function() {
+                this.unsubs.forEach(u => u());
+                this.unsubs = [];
+                if(this.state.timerIntervalObj) clearInterval(this.state.timerIntervalObj);
+            },
+
+            loadData: function() {
+                if (this.state.userData && this.state.userData.role === 'mentor') {
+                    const qStudents = query(collection(db, 'users'), where("role", "==", "student"));
+                    const u1 = onSnapshot(qStudents, (snap) => {
+                        this.state.students = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        this.render();
+                    });
+                    this.unsubs.push(u1);
+                }
+                const u2 = onSnapshot(collection(db, 'classes'), (snap) => {
+                    let cls = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    cls.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    this.state.classes = cls;
+                    this.render();
+                });
+                this.unsubs.push(u2);
+            },
+
+            initCarousel: function() {
+                const container = document.getElementById('bg-carousel');
+                bgImages.forEach((src, i) => {
+                    const img = document.createElement('img');
+                    img.src = src;
+                    img.className = `absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${i === 0 ? 'opacity-100' : 'opacity-0'}`;
+                    img.id = `bg-img-${i}`;
+                    container.appendChild(img);
+                });
+                let idx = 0;
+                setInterval(() => {
+                    document.getElementById(`bg-img-${idx}`).classList.remove('opacity-100');
+                    document.getElementById(`bg-img-${idx}`).classList.add('opacity-0');
+                    idx = (idx + 1) % bgImages.length;
+                    document.getElementById(`bg-img-${idx}`).classList.remove('opacity-0');
+                    document.getElementById(`bg-img-${idx}`).classList.add('opacity-100');
+                }, 8000);
+            },
+
+            notify: function(msg, isError = false) {
+                const toast = document.createElement('div');
+                toast.className = `fixed bottom-4 right-4 ${isError ? 'bg-rose-600' : 'bg-emerald-600'} border border-white/20 text-white px-4 py-3 rounded-xl shadow-2xl z-[9999] flex items-center gap-2 font-bold text-sm transition-opacity duration-500 opacity-0`;
+                toast.innerHTML = `<i data-lucide="${isError ? 'alert-triangle' : 'check-circle'}" class="w-4 h-4"></i> ${msg}`;
+                document.body.appendChild(toast);
+                if(window.lucide) lucide.createIcons();
+                setTimeout(() => { toast.style.opacity = '1'; }, 10);
+                setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3500);
+            },
+
+            formatDateBR: (ds) => {
+                if(!ds) return '';
+                if(ds.includes('-')) { const [y,m,d] = ds.split('-'); return `${d}/${m}/${y}`; }
+                return new Date(ds).toLocaleDateString('pt-BR');
+            },
+            formatDateTimeBR: (ds) => {
+                if(!ds) return '';
+                const d = new Date(ds);
+                return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+            },
+            formatTimer: function(totalSeconds) {
+                const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+                const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+                const s = (totalSeconds % 60).toString().padStart(2, '0');
+                return `${h}:${m}:${s}`;
+            },
+            compressImg: (file) => new Promise((resolve) => {
+                const r = new FileReader(); r.readAsDataURL(file);
+                r.onload = (e) => {
+                    const i = new Image(); i.src = e.target.result;
+                    i.onload = () => {
+                        const c = document.createElement('canvas');
+                        let w = i.width, h = i.height;
+                        if(w>h) { if(w>300){h*=300/w; w=300;} } else { if(h>300){w*=300/h; h=300;} }
+                        c.width = w; c.height = h;
+                        c.getContext('2d').drawImage(i,0,0,w,h);
+                        resolve(c.toDataURL('image/jpeg', 0.8));
+                    };
+                };
+            }),
+            
+            getSafePw: function(key) {
+                try { 
+                    const val = localStorage.getItem(key);
+                    if(!val) return '';
+                    return decodeURIComponent(atob(val)); 
+                } catch(e) { 
+                    try { return atob(localStorage.getItem(key)); } catch(err) { return ''; }
+                }
+            },
+            setSafePw: function(key, pw) {
+                try { localStorage.setItem(key, btoa(encodeURIComponent(pw))); } catch(e) {}
+            },
+
+            setView: function(v) { 
+                this.state.authView = v; 
+                this.state.authError = ''; 
+                this.state.lastTypedEmail = ''; 
+                this.state.lastTypedPw = ''; 
+                this.render(); 
+            },
+            setTab: function(t) { this.state.activeTab = t; this.state.isMenuOpen = false; this.render(); },
+            toggleMenu: function() { this.state.isMenuOpen = !this.state.isMenuOpen; this.render(); },
+            logout: function() { 
+                this.state.lastTypedEmail = ''; 
+                this.state.lastTypedPw = ''; 
+                signOut(auth); 
+            },
+            
+            togglePassword: function(id) {
+                const el = document.getElementById(id);
+                const btn = document.getElementById(`btn-${id}`);
+                if(el.type === 'password') { el.type = 'text'; btn.innerHTML = '<i data-lucide="eye-off" class="w-4 h-4 md:w-5 md:h-5"></i>'; } 
+                else { el.type = 'password'; btn.innerHTML = '<i data-lucide="eye" class="w-4 h-4 md:w-5 md:h-5"></i>'; }
+                lucide.createIcons();
+            },
+
+            uploadLogo: async function(input) {
+                if(input.files[0]) {
+                    const b64 = await this.compressImg(input.files[0]);
+                    this.state.platformLogo = b64;
+                    localStorage.setItem('customPlatformLogo', b64);
+                    this.render();
+                }
+            },
+
+            startTimer: function(taskId, totalMins) {
+                if (this.state.activeTimerId === taskId && this.state.timerIntervalObj) return; 
+                
+                if (this.state.activeTimerId !== taskId) {
+                    this.state.activeTimerId = taskId;
+                    this.state.activeTimerSeconds = totalMins * 60;
+                }
+                
+                if(this.state.timerIntervalObj) clearInterval(this.state.timerIntervalObj);
+                
+                this.state.timerIntervalObj = setInterval(() => {
+                    if (this.state.activeTimerSeconds > 0) {
+                        this.state.activeTimerSeconds--;
+                        const el = document.getElementById(`timer-display-${taskId}`);
+                        if(el) el.innerText = this.formatTimer(this.state.activeTimerSeconds);
+                    } else {
+                        this.pauseTimer();
+                    }
+                }, 1000);
+                this.render();
+            },
+            pauseTimer: function() {
+                if(this.state.timerIntervalObj) {
+                    clearInterval(this.state.timerIntervalObj);
+                    this.state.timerIntervalObj = null;
+                }
+                this.render();
+            },
+
+            // =========================================================================
+            // LOGIN E CADASTRO: CÓDIGO 100% ORIGINAL RESTAURADO E BLINDADO
+            // =========================================================================
+            loginStudent: async function(e) {
+                e.preventDefault();
+                const em = document.getElementById('log-em').value.trim();
+                const pw = document.getElementById('log-pw').value;
+                const rem = document.getElementById('log-rem').checked;
+                
+                this.state.lastTypedEmail = em;
+                this.state.lastTypedPw = pw;
+                
+                const btn = document.getElementById('btn-log-submit');
+                const origTxt = btn ? btn.innerHTML : '';
+                if(btn) { btn.innerHTML = LOADER_SVG; btn.disabled = true; }
+                this.state.authError = '';
+                
+                try {
+                    const cred = await signInWithEmailAndPassword(auth, em, pw);
+                    
+                    // Auto-recuperação Local (Somente se não existir, cria o perfil do aluno)
+                    try {
+                        const docRef = doc(db, 'users', cred.user.uid);
+                        const d = await getDoc(docRef);
+                        if(!d.exists()) {
+                            await setDoc(docRef, {
+                                name: "Aluno(a)", email: em, age: 18, targetExam: "Definir", 
+                                schedule: { seg: 4, ter: 4, qua: 4, qui: 4, sex: 4, sab: 6, dom: 0 },
+                                role: 'student', status: 'pending', retention: 0, streak: 0, hours: 0, tasksDone: 0,
+                                avatarUrl: null, mentorMessages: [], performance: {}, generatedSchedule: [], flashcards: [], dailyCardLimit: 10, rawEdital: '', createdAt: new Date().toISOString()
+                            });
+                        }
+                    } catch(ex){}
+
+                    if(rem) { localStorage.setItem('wg_s_em', em); this.setSafePw('wg_s_pw', pw); }
+                    else { localStorage.removeItem('wg_s_em'); localStorage.removeItem('wg_s_pw'); }
+                } catch(err) { 
+                    console.error(err);
+                    this.state.authError = 'E-mail ou senha incorretos.'; 
+                    if(btn) { btn.innerHTML = origTxt; btn.disabled = false; }
+                    this.render(); 
+                }
+            },
+
+            registerStudent: async function(e) {
+                e.preventDefault();
+                const em = document.getElementById('reg-em').value.trim();
+                const pw = document.getElementById('reg-pw').value;
+                const nm = document.getElementById('reg-nm').value;
+                const ex = document.getElementById('reg-ex').value;
+                const ag = document.getElementById('reg-ag').value;
+
+                const btn = document.getElementById('btn-reg-submit');
+                const origTxt = btn ? btn.innerHTML : '';
+                if(btn) { btn.innerHTML = LOADER_SVG; btn.disabled = true; }
+                this.state.authError = '';
+
+                try {
+                    const cred = await createUserWithEmailAndPassword(auth, em, pw);
+                    await setDoc(doc(db, 'users', cred.user.uid), {
+                        name: nm, email: em, age: Number(ag), targetExam: ex, schedule: this.state.schedule,
+                        role: 'student', status: 'pending', retention: 0, streak: 0, hours: 0, tasksDone: 0,
+                        avatarUrl: this.state.regAvatarUrl, mentorMessages: [], performance: {}, generatedSchedule: [], flashcards: [], dailyCardLimit: 10, rawEdital: '', createdAt: new Date().toISOString()
+                    });
+                } catch(err) {
+                    console.error(err);
+                    if(err.code==='auth/email-already-in-use') this.state.authError='Este e-mail já está cadastrado. Tente entrar.';
+                    else if(err.code==='auth/weak-password') this.state.authError='A senha deve ter no mínimo 6 caracteres.';
+                    else this.state.authError = 'Erro ao criar conta: ' + err.message;
+                    if(btn) { btn.innerHTML = origTxt; btn.disabled = false; }
+                    this.render();
+                }
+            },
+
+            loginMentor: async function(e) {
+                e.preventDefault();
+                const em = document.getElementById('men-em').value.trim();
+                const pw = document.getElementById('men-pw').value;
+                const rem = document.getElementById('men-rem').checked;
+                
+                this.state.lastTypedEmail = em;
+                this.state.lastTypedPw = pw;
+
+                const btn = document.getElementById('btn-men-submit');
+                const origTxt = btn ? btn.innerHTML : '';
+                if(btn) { btn.innerHTML = LOADER_SVG; btn.disabled = true; }
+                this.state.authError = '';
+
+                try {
+                    await signInWithEmailAndPassword(auth, em, pw);
+                    
+                    // Auto-Recuperação Local Mentora
+                    try {
+                        const docRef = doc(db, 'users', auth.currentUser.uid);
+                        const d = await getDoc(docRef);
+                        if(!d.exists()) {
+                            await setDoc(docRef, { name: 'Wanessa Guedes', email: em, role: 'mentor', avatarUrl: null });
+                        }
+                    } catch(ex){}
+
+                    if(rem) { localStorage.setItem('wg_m_em', em); this.setSafePw('wg_m_pw', pw); }
+                    else { localStorage.removeItem('wg_m_em'); localStorage.removeItem('wg_m_pw'); }
+                } catch(err) {
+                    if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-login-credentials') {
+                        try {
+                            const cred = await createUserWithEmailAndPassword(auth, em, pw);
+                            await setDoc(doc(db, 'users', cred.user.uid), { name: 'Wanessa Guedes', email: em, role: 'mentor', avatarUrl: null });
+                            if(rem) { localStorage.setItem('wg_m_em', em); this.setSafePw('wg_m_pw', pw); }
+                            else { localStorage.removeItem('wg_m_em'); localStorage.removeItem('wg_m_pw'); }
+                        } catch(cErr) {
+                            if(cErr.code==='auth/email-already-in-use') this.state.authError='Senha incorreta.';
+                            else this.state.authError = "Erro no banco. Verifique as Regras do Firestore.";
+                            if(btn) { btn.innerHTML = origTxt; btn.disabled = false; }
+                            this.render();
+                        }
+                    } else { 
+                        console.error(err);
+                        this.state.authError = 'Senha incorreta ou erro de rede.'; 
+                        if(btn) { btn.innerHTML = origTxt; btn.disabled = false; }
+                        this.render();
+                    }
+                }
+            },
+            // =========================================================================
+
+            updateSchedVal: function(day, delta) {
+                let cur = this.state.schedule[day] || 0;
+                this.state.schedule[day] = Math.max(0, Math.min(24, cur + delta));
+                const el = document.getElementById(`sch-${day}`);
+                if(el) el.innerText = `${this.state.schedule[day]}h`;
+            },
+
+            uploadAvatar: async function(input, type) {
+                if(input.files[0]) {
+                    const b64 = await this.compressImg(input.files[0]);
+                    if(type === 'reg') { 
+                        this.state.regAvatarUrl = b64; 
+                        const imgDisplay = document.getElementById('reg-av-display');
+                        if (imgDisplay) imgDisplay.innerHTML = `<img src="${b64}" class="w-full h-full object-cover"/>`;
+                    }
+                    if(type === 'mentor' || type === 'student') {
+                        await updateDoc(doc(db, 'users', this.state.userData.id), { avatarUrl: b64 });
+                        if(type === 'mentor') localStorage.setItem('wg_mentor_avatar', b64);
+                    }
+                }
+            },
+
+            approveStudent: async function(id) { await updateDoc(doc(db, 'users', id), { status: 'active' }); },
+            
+            selectStudent: function(id) { 
+                this.state.selectedStudentId = id; 
+                this.state.parsedBlocks = null;
+                this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
+                this.state.confirmDeleteId = null;
+                this.render(); 
+            },
+            
+            saveClass: async function(e) {
+                e.preventDefault();
+                const btn = document.getElementById('btn-save-class');
+                const oTxt = btn.innerHTML;
+                btn.innerHTML = LOADER_SVG; btn.disabled = true; 
+                
+                const title = document.getElementById('cls-title').value;
+                const subject = document.getElementById('cls-subj').value;
+                const date = document.getElementById('cls-date').value;
+                
+                try {
+                    if(this.state.editingClassId) {
+                        await updateDoc(doc(db, 'classes', this.state.editingClassId), { title, subject, date });
+                        this.state.editingClassId = null;
+                    } else {
+                        await addDoc(collection(db, 'classes'), { title, subject, date, createdAt: new Date().toISOString() });
+                    }
+                    this.render(); 
+                } catch(err) { 
+                    this.notify('Erro ao salvar aula. Verifique permissões.', true);
+                    btn.innerHTML = oTxt; btn.disabled = false; lucide.createIcons();
+                }
+            },
+            editClass: function(id) {
+                const cls = this.state.classes.find(c=>c.id===id);
+                this.state.editingClassId = id;
+                this.state.confirmDeleteClassId = null;
+                this.render();
+                setTimeout(() => {
+                    document.getElementById('cls-title').value = cls.title;
+                    document.getElementById('cls-subj').value = cls.subject;
+                    document.getElementById('cls-date').value = cls.date;
+                    document.getElementById('cls-form').scrollIntoView({behavior: 'smooth'});
+                }, 50);
+            },
+            deleteClass: function(id) { this.state.confirmDeleteClassId = id; this.render(); },
+            confirmDeleteClass: async function(id) {
+                try { await deleteDoc(doc(db, 'classes', id)); this.state.confirmDeleteClassId = null; } 
+                catch(e) { this.notify("Erro ao apagar.", true); }
+            },
+            cancelDeleteClass: function() { this.state.confirmDeleteClassId = null; this.render(); },
+
+            sendMsg: async function(e, role, targetId) {
+                e.preventDefault();
+                const inp = document.getElementById('chat-inp');
+                const txt = inp.value;
+                if(!txt.trim()) return;
+                inp.disabled = true;
+                const targetUser = role === 'mentor' ? this.state.students.find(s=>s.id===targetId) : this.state.userData;
+                const msgs = targetUser.mentorMessages || [];
+                await updateDoc(doc(db, 'users', targetId), { mentorMessages: [...msgs, { role: role, text: txt, date: new Date().toISOString() }] });
+                inp.value = ''; inp.disabled = false;
+                setTimeout(() => { const el = document.getElementById('chat-end'); if(el) el.scrollIntoView(); }, 100);
+            },
+
+            toggleMindMapNode: function(nodeId) {
+                if (this.state.expandedMindMapId === nodeId) {
+                    this.state.expandedMindMapId = null;
+                } else {
+                    this.state.expandedMindMapId = nodeId;
+                }
+                this.render();
+            },
+
+            // =========================================================================
+            // MENTORA: MOTOR DE AGRUPAMENTO (REGRA HIERÁRQUICA ESTRITA INQUEBRÁVEL)
+            // =========================================================================
+            addEditalForm: function() {
+                this.state.editalForms.push({ id: Date.now(), name: '', content: '' });
+                this.render();
+            },
+            updateEditalForm: function(id, field, value) {
+                const form = this.state.editalForms.find(f => f.id === id);
+                if(form) form[field] = value;
+            },
+            removeEditalForm: function(id) {
+                this.state.editalForms = this.state.editalForms.filter(f => f.id !== id);
+                this.render();
+            },
+
+            processEditalForms: function() {
+                let blocks = [];
+                
+                this.state.editalForms.forEach(form => {
+                    if (!form.name.trim() || !form.content.trim()) return;
+
+                    let disciplineName = form.name.trim().toUpperCase();
+                    let lines = form.content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                    
+                    let currentRoot = null;
+                    let currentContent = [];
+
+                    const pushBlock = () => {
+                        if (currentContent.length > 0) {
+                            blocks.push({
+                                id: 'b_' + Date.now() + Math.random().toString(36).substr(2, 9),
+                                discipline: disciplineName,
+                                content: currentContent.join(' ') // Agrupa TUDO em um bloco de texto sem quebras de linha
+                            });
+                            currentContent = [];
+                        }
+                    };
+
+                    lines.forEach(line => {
+                        // Captura apenas a raiz principal, ignorando os subníveis
+                        // Ex: "4.2.10 Processo..." vai extrair apenas o "4".
+                        let match = line.match(/^ *(\d+)/);
+                        if (match) {
+                            let rootNum = match[1];
+                            if (currentRoot === null) {
+                                currentRoot = rootNum;
+                            } else if (currentRoot !== rootNum) {
+                                pushBlock(); // Se mudou da raiz "4" para a raiz "5", salva o bloco anterior.
+                                currentRoot = rootNum;
+                            }
+                            currentContent.push(line);
+                        } else {
+                            currentContent.push(line); // Se não começar com número, é continuação do bloco atual.
+                        }
+                    });
+                    pushBlock(); // Salva o último
+                });
+
+                if (blocks.length === 0) return this.notify("Preencha pelo menos uma disciplina e tópicos válidos.", true);
+
+                this.state.parsedBlocks = blocks;
+                this.render();
+            },
+
+            removeParsedBlock: function(id) {
+                this.state.parsedBlocks = this.state.parsedBlocks.filter(b => b.id !== id);
+                this.render();
+            },
+            addNewBlock: function() {
+                this.state.parsedBlocks.unshift({
+                    id: 'b_' + Date.now(),
+                    discipline: 'NOVA DISCIPLINA',
+                    content: '1 Novo Assunto'
+                });
+                this.render();
+            },
+            updateParsedBlock: function(id, field, value) {
+                const block = this.state.parsedBlocks.find(b => b.id === id);
+                if(block) block[field] = value;
+            },
+
+            // =========================================================================
+            // MENTORA: DELETAR CRONOGRAMA NATIVO (CORRIGIDO PARA NÃO TRAVAR)
+            // =========================================================================
+            deleteStudentSchedule: async function(studentId) {
+                if (this.state.confirmDeleteId === studentId) {
+                    try {
+                        await updateDoc(doc(db, 'users', studentId), {
+                            generatedSchedule: [],
+                            flashcards: [],
+                            rawEdital: ''
+                        });
+                        this.state.parsedBlocks = null;
+                        this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
+                        this.state.confirmDeleteId = null;
+                        this.notify('Cronograma do aluno foi apagado permanentemente.');
+                        this.render();
+                    } catch(e) {
+                        console.error(e);
+                        this.notify('Erro ao excluir no Firebase. Verifique console.', true);
+                    }
+                } else {
+                    this.state.confirmDeleteId = studentId;
+                    this.render();
+                    setTimeout(() => { 
+                        if(this.state.confirmDeleteId === studentId) {
+                            this.state.confirmDeleteId = null; 
+                            this.render(); 
+                        }
+                    }, 4000);
+                }
+            },
+
+            // =========================================================================
+            // GERADOR FINAL DO CRONOGRAMA: EXCLUSIVIDADE 1H E SPACED REPETITION
+            // =========================================================================
+            finalizeSchedule: async function(studentId) {
+                const stu = this.state.students.find(s=>s.id===studentId);
+                const blocks = this.state.parsedBlocks;
+
+                if(!blocks || blocks.length === 0) return this.notify('Não há blocos para gerar.', true);
+
+                this.notify('Processando e gerando cronograma de longo prazo...', false);
+
+                let flatTopics = blocks.map(b => {
+                    return { subject: b.discipline, content: b.content };
+                });
+
+                const result = this._generateLogic(flatTopics, stu.schedule, new Date());
+
+                try {
+                    await updateDoc(doc(db, 'users', studentId), {
+                        generatedSchedule: result.draft,
+                        flashcards: [...(stu.flashcards || []), ...result.fcards],
+                        rawEdital: "Cronograma Estruturado e Inteligente Gerado."
+                    });
+                    this.state.parsedBlocks = null;
+                    this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
+                    this.notify("Cronograma Perfeito criado com sucesso!");
+                    this.render();
+                } catch(e) {
+                    console.error(e);
+                    this.notify("Erro ao salvar o cronograma.", true);
+                }
+            },
+
+            _generateLogic: function(flatTopics, scheduleConfig, baseDate) {
+                let draft = [];
+                let fcards = [];
+                let pendingTasks = [];
+
+                flatTopics.forEach((item, idx) => {
+                    pendingTasks.push({ 
+                        id: 'base_' + idx, 
+                        subject: item.subject, 
+                        content: item.content, 
+                        type: 'teoria', 
+                        minDate: new Date(baseDate),
+                        step: 0 
+                    });
+                });
+
+                let currDate = new Date(baseDate);
+                currDate.setHours(0,0,0,0);
+                const daysKeys = ['dom','seg','ter','qua','qui','sex','sab'];
+                let globalId = 0;
+                let sanityCheck = 0;
+
+                const advanceToValidDay = (d) => {
+                    let dCopy = new Date(d);
+                    let count = 0;
+                    while((scheduleConfig[daysKeys[dCopy.getDay()]] || 0) === 0 && count < 14) {
+                        dCopy.setDate(dCopy.getDate() + 1); count++;
+                    }
+                    return dCopy;
+                };
+
+                currDate = advanceToValidDay(currDate);
+
+                while(pendingTasks.length > 0 && sanityCheck < 5000) {
+                    sanityCheck++;
+                    let dayKey = daysKeys[currDate.getDay()];
+                    let totalHoursAvailable = Math.floor(scheduleConfig[dayKey] || 0); 
+                    
+                    if (totalHoursAvailable > 0) {
+                        let subjectsStudiedToday = new Set();
+                        let slotsUsed = 0;
+
+                        let dueTasks = pendingTasks.filter(t => t.minDate <= currDate);
+
+                        // Garante EXATAMENTE X Blocos para X Horas de estudo no dia
+                        while (slotsUsed < totalHoursAvailable && dueTasks.length > 0) {
+                            
+                            dueTasks.sort((a, b) => {
+                                if (a.step !== b.step) return b.step - a.step; 
+                                let aSubj = subjectsStudiedToday.has(a.subject) ? 1 : 0;
+                                let bSubj = subjectsStudiedToday.has(b.subject) ? 1 : 0;
+                                return aSubj - bSubj; 
+                            });
+
+                            let selectedTask = dueTasks.shift();
+                            let actualIdx = pendingTasks.indexOf(selectedTask);
+                            if(actualIdx > -1) pendingTasks.splice(actualIdx, 1);
+
+                            const tId = Date.now() + '_' + globalId++;
+                            const offset = currDate.getTimezoneOffset() * 60000;
+                            const dateStr = (new Date(currDate.getTime() - offset)).toISOString().split('T')[0];
+                            
+                            // FORMATAÇÃO ESTRITA: Regra de Exclusividade do Bloco
+                            let typeLabel = '';
+                            if (selectedTask.type === 'teoria') typeLabel = '(1h de teoria)';
+                            else if (selectedTask.type === 'revisao') typeLabel = '(1h de revisão)';
+                            else if (selectedTask.type === 'questoes') typeLabel = '(1h de questões)';
+
+                            // Output exato: [NOME DA DISCIPLINA]: [Número do Tópico] ... ([1h de atividade])
+                            let formattedTopic = `${selectedTask.subject}: ${selectedTask.content} ${typeLabel}`;
+
+                            let taskObj = {
+                                id: 'tsk_' + tId, 
+                                topic: formattedTopic, 
+                                subject: selectedTask.subject,
+                                type: selectedTask.type, 
+                                duration: 60, // 1 HORA INQUEBRÁVEL
+                                date: dateStr, 
+                                completed: false
+                            };
+
+                            if (selectedTask.type === 'questoes') {
+                                taskObj.qTotal = 0; taskObj.qCorrect = 0;
+                            }
+
+                            draft.push(taskObj);
+                            subjectsStudiedToday.add(selectedTask.subject);
+                            slotsUsed++;
+
+                            // SPACED REPETITION OBRIGATÓRIA (D+1, D+7, D+15, D+30)
+                            if (selectedTask.type === 'teoria') {
+                                let d1 = new Date(currDate); d1.setDate(d1.getDate() + 1);
+                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'revisao', minDate: d1, step: 1 });
+
+                                fcards.push({
+                                    id: 'fc_'+tId, 
+                                    front: `[${selectedTask.subject}] Qual a ideia central da Teoria abordada em:\n${selectedTask.content.substring(0, 45)}...?`, 
+                                    back: `Tente explicar os conceitos básicos e características da disciplina de ${selectedTask.subject}.`,
+                                    nextReviewDate: dateStr, interval: 1, easeFactor: 2.5
+                                });
+                            } 
+                            else if (selectedTask.type === 'revisao' && selectedTask.step === 1) {
+                                let d7 = new Date(currDate); d7.setDate(d7.getDate() + 6);
+                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'questoes', minDate: d7, step: 2 });
+                            }
+                            else if (selectedTask.type === 'questoes' && selectedTask.step === 2) {
+                                let d15 = new Date(currDate); d15.setDate(d15.getDate() + 8);
+                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'revisao', minDate: d15, step: 3 });
+                            }
+                            else if (selectedTask.type === 'revisao' && selectedTask.step === 3) {
+                                let d30 = new Date(currDate); d30.setDate(d30.getDate() + 15);
+                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'questoes', minDate: d30, step: 4 });
+                            }
+                        }
+                    }
+                    currDate.setDate(currDate.getDate() + 1);
+                    currDate = advanceToValidDay(currDate);
+                }
+
+                return { draft, fcards };
+            },
+
+            readjustSchedule: async function(e) {
+                if(e) e.preventDefault();
+                const u = this.state.userData;
+                let sched = [...(u.generatedSchedule || [])];
+                let completed = sched.filter(t => t.completed);
+                let incomplete = sched.filter(t => !t.completed);
+                
+                incomplete.sort((a,b) => new Date(a.date) - new Date(b.date));
+                
+                let currDate = new Date();
+                currDate.setHours(0,0,0,0);
+                const keys = ['dom','seg','ter','qua','qui','sex','sab'];
+                
+                let scheduleConfig = u.schedule || { seg: 4, ter: 4, qua: 4, qui: 4, sex: 4, sab: 6, dom: 0 };
+                let totalSlots = 0;
+                Object.values(scheduleConfig).forEach(v => totalSlots += Number(v));
+                if(totalSlots === 0) return this.notify("Vá em Perfil e configure suas horas disponíveis.", true);
+                
+                const advanceToValidDay = (d) => {
+                    let dCopy = new Date(d);
+                    let count = 0;
+                    while((scheduleConfig[keys[dCopy.getDay()]] || 0) === 0 && count < 14) {
+                        dCopy.setDate(dCopy.getDate() + 1); count++;
+                    }
+                    return dCopy;
+                };
+
+                currDate = advanceToValidDay(currDate);
+                
+                let incIdx = 0;
+                let safety = 0;
+                while(incIdx < incomplete.length && safety < 1000) {
+                    safety++;
+                    let dayKey = keys[currDate.getDay()];
+                    let slots = Math.floor(scheduleConfig[dayKey] || 0);
+                    
+                    for(let i=0; i<slots && incIdx < incomplete.length; i++) {
+                        const offset = currDate.getTimezoneOffset() * 60000;
+                        incomplete[incIdx].date = (new Date(currDate.getTime() - offset)).toISOString().split('T')[0];
+                        incIdx++;
+                    }
+                    currDate.setDate(currDate.getDate() + 1);
+                    currDate = advanceToValidDay(currDate);
+                }
+                
+                try {
+                    await updateDoc(doc(db, 'users', u.id), { generatedSchedule: [...completed, ...incomplete] });
+                    this.notify("Cronograma reajustado com sucesso!");
+                } catch(e) { this.notify("Erro ao reajustar cronograma.", true); }
+                this.render();
+            },
+
+            saveStudentProfile: async function() {
+                const btn = document.getElementById('btn-save-prof');
+                const origTxt = btn.innerHTML;
+                btn.innerHTML = LOADER_SVG; btn.disabled = true;
+                
+                try {
+                    const newSchedObj = this.state.schedule;
+                    let payload = { schedule: newSchedObj };
+                    
+                    let generated = [...(this.state.userData.generatedSchedule || [])];
+                    if (generated.length > 0) {
+                        let incomplete = generated.filter(t => !t.completed);
+                        let completed = generated.filter(t => t.completed);
+                        
+                        incomplete.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+                        let currDate = new Date();
+                        currDate.setHours(0,0,0,0);
+                        const keys = ['dom','seg','ter','qua','qui','sex','sab'];
+
+                        let incIdx = 0;
+                        while(incIdx < incomplete.length) {
+                            let dayKey = keys[currDate.getDay()];
+                            let slots = Math.floor(newSchedObj[dayKey] || 0);
+
+                            for(let i=0; i<slots && incIdx < incomplete.length; i++) {
+                                const offset = currDate.getTimezoneOffset() * 60000;
+                                incomplete[incIdx].date = (new Date(currDate.getTime() - offset)).toISOString().split('T')[0];
+                                incIdx++;
+                            }
+                            currDate.setDate(currDate.getDate() + 1);
+                        }
+                        payload.generatedSchedule = [...completed, ...incomplete];
+                    }
+
+                    await updateDoc(doc(db, 'users', this.state.userData.id), payload);
+                    
+                    btn.innerHTML = '<i data-lucide="check" class="w-5 h-5"></i> Atualizado!';
+                    btn.classList.add('bg-emerald-600'); lucide.createIcons();
+                    setTimeout(()=> { 
+                        btn.innerHTML = origTxt;
+                        btn.classList.remove('bg-emerald-600'); 
+                        btn.disabled = false;
+                        this.render(); 
+                    }, 2000);
+                } catch(e) { btn.innerHTML = 'Erro ao salvar'; btn.disabled = false; }
+            },
+
+            toggleStudentTask: async function(taskId) {
+                const u = this.state.userData;
+                if(!u.generatedSchedule) return;
+                const newSched = [...u.generatedSchedule];
+                const task = newSched.find(t => t.id === taskId);
+                if(!task) return;
+
+                if(task.type === 'questoes' && !task.completed) {
+                    this.state.activeTaskInputId = taskId;
+                    this.render();
+                    return;
+                }
+
+                task.completed = !task.completed;
+                if(task.completed && this.state.activeTimerId === taskId) {
+                    this.pauseTimer();
+                    this.state.activeTimerId = null;
+                }
+                
+                if(!task.completed && task.type === 'questoes') {
+                    task.qTotal = 0; task.qCorrect = 0;
+                }
+
+                try { await updateDoc(doc(db, 'users', u.id), { generatedSchedule: newSched }); } catch(e){}
+            },
+
+            saveQuestionsTask: async function(taskId) {
+                const tot = parseInt(document.getElementById(`q-tot-${taskId}`).value) || 0;
+                const cor = parseInt(document.getElementById(`q-cor-${taskId}`).value) || 0;
+                
+                if (tot <= 0) return this.notify("Insira o total de questões resolvidas.", true);
+                if (cor > tot) return this.notify("Os acertos não podem ser maiores que o total.", true);
+
+                const u = this.state.userData;
+                const newSched = [...u.generatedSchedule];
+                const task = newSched.find(t => t.id === taskId);
+                
+                task.completed = true;
+                task.qTotal = tot;
+                task.qCorrect = cor;
+
+                if(this.state.activeTimerId === taskId) {
+                    this.pauseTimer();
+                    this.state.activeTimerId = null;
+                }
+
+                const perf = u.performance || {};
+                const subj = task.subject || 'Gerais';
+                if(!perf[subj]) perf[subj] = { total: 0, correct: 0 };
+                perf[subj].total += tot;
+                perf[subj].correct += cor;
+
+                this.state.activeTaskInputId = null;
+                try {
+                    await updateDoc(doc(db, 'users', u.id), { generatedSchedule: newSched, performance: perf });
+                } catch(e) { this.notify("Erro ao salvar pontuação.", true); }
+            },
+            cancelQuestionsTask: function() { this.state.activeTaskInputId = null; this.render(); },
+
+            saveCustomFlashcard: async function(e) {
+                e.preventDefault();
+                const front = document.getElementById('fc-front').value;
+                const back = document.getElementById('fc-back').value;
+                const u = this.state.userData;
+                const cards = [...(u.flashcards || [])];
+                cards.push({
+                    id: 'fc_c_' + Date.now(),
+                    front: front, back: back,
+                    nextReviewDate: new Date().toISOString(),
+                    interval: 1, easeFactor: 2.5
+                });
+                try { 
+                    await updateDoc(doc(db, 'users', u.id), { flashcards: cards }); 
+                    this.notify("Cartão adicionado com sucesso!");
+                    this.render();
+                } catch(err) {}
+            },
+
+            updateCardLimit: async function(e) {
+                e.preventDefault();
+                const btn = e.target.querySelector('button[type="submit"]');
+                const origTxt = btn.innerText;
+                btn.innerText = 'Salvando...'; btn.disabled = true;
+
+                const limit = parseInt(document.getElementById('fc-limit').value);
+                if(limit > 0) {
+                    try {
+                        await updateDoc(doc(db, 'users', this.state.userData.id), { dailyCardLimit: limit });
+                        this.notify("Meta de cartões salva com sucesso!");
+                    } catch(e) { this.notify("Erro ao salvar limite.", true); }
+                }
+                btn.innerText = origTxt; btn.disabled = false;
+            },
+
+            srsAnswer: async function(cardId, quality) {
+                const u = this.state.userData;
+                let cards = [...(u.flashcards || [])];
+                let card = cards.find(c => c.id === cardId);
+                if(!card) return;
+
+                if(quality === 0) {
+                    card.interval = 1;
+                    card.easeFactor = Math.max(1.3, card.easeFactor - 0.2);
+                } else if (quality === 1) {
+                    card.interval = Math.max(1, Math.round(card.interval * 1.2));
+                } else if (quality === 2) {
+                    card.interval = Math.max(1, Math.round(card.interval * card.easeFactor));
+                    card.easeFactor += 0.15;
+                }
+
+                let nextDate = new Date();
+                nextDate.setDate(nextDate.getDate() + card.interval);
+                card.nextReviewDate = nextDate.toISOString();
+
+                this.state.isCardFlipped = false;
+                try { await updateDoc(doc(db, 'users', u.id), { flashcards: cards }); } catch(e){}
+            },
+
+            flipCard: function() { this.state.isCardFlipped = !this.state.isCardFlipped; this.render(); },
+
+            render: function() {
+                const root = document.getElementById('app-root');
+                if (this.state.loading) return; 
+                
+                let html = '';
+                if (!this.state.userData) html = this.getAuthHtml();
+                else if (this.state.userData.status === 'pending') html = this.getPendingHtml();
+                else if (this.state.userData.role === 'mentor') html = this.getMentorHtml();
+                else html = this.getStudentHtml();
+
+                root.innerHTML = html;
+                lucide.createIcons(); 
+            },
+
+            getLogoHtml: function(isSmall = false) {
+                const logo = this.state.platformLogo;
+                if(isSmall) {
+                    return `
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-lg overflow-hidden cursor-pointer bg-slate-800" onclick="document.getElementById('global-logo-upload').click()">
+                        <input type="file" id="global-logo-upload" onchange="window.App.uploadLogo(this)" class="hidden" accept="image/*"/>
+                        ${logo ? `<img src="${logo}" class="w-full h-full object-cover bg-white"/>` : `<div class="w-full h-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center"><i data-lucide="brain-circuit" class="text-white w-5 h-5 md:w-6 md:h-6"></i></div>`}
+                    </div>`;
+                }
+                return `
+                <div class="relative w-24 h-24 md:w-32 md:h-32 mx-auto mb-4 md:mb-6 group cursor-pointer" onclick="document.getElementById('global-logo-upload').click()">
+                    <input type="file" id="global-logo-upload" onchange="window.App.uploadLogo(this)" class="hidden" accept="image/*"/>
+                    <div class="w-full h-full rounded-full overflow-hidden border-4 border-violet-500/50 shadow-[0_0_40px_rgba(139,92,246,0.6)] ${logo?'bg-white':'bg-gradient-to-tr from-violet-600 to-cyan-600'} flex items-center justify-center">
+                        ${logo ? `<img src="${logo}" class="w-full h-full object-cover"/>` : `<i data-lucide="brain-circuit" class="text-white w-12 h-12 md:w-16 md:h-16"></i>`}
+                    </div>
+                    <div class="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i data-lucide="camera" class="text-white w-5 h-5 md:w-6 md:h-6 mb-1"></i><span class="text-[8px] md:text-[10px] text-white font-bold uppercase tracking-wider">Alterar Logo</span>
+                    </div>
+                </div>`;
+            },
+
+            getAuthHtml: function() {
+                const v = this.state.authView;
+                const err = this.state.authError ? `<div class="bg-rose-500/20 border border-rose-500/50 text-rose-300 p-2 md:p-3 rounded-xl mb-4 md:mb-6 text-xs md:text-sm flex items-start gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 md:w-5 md:h-5 flex-shrink-0 mt-0.5"></i><p>${this.state.authError}</p></div>` : '';
+
+                if(v === 'select') {
+                    return `
+                    <div class="h-full w-full overflow-y-auto flex items-center justify-center p-3 sm:p-4 py-8 md:py-12 custom-scrollbar">
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] w-full max-w-[95%] sm:max-w-sm md:max-w-md text-center shadow-2xl animate-fade-in my-auto">
+                            ${this.getLogoHtml()}
+                            <h1 class="text-2xl md:text-4xl font-extrabold text-white mb-2 neon-text">Mentoria Wanessa Guedes</h1>
+                            <p class="text-slate-400 text-sm md:text-base mb-6 md:mb-10 font-medium">Selecione o seu portal de acesso.</p>
+                            <div class="space-y-3 md:space-y-4">
+                                <button onclick="window.App.setView('loginStudent')" class="w-full py-3 md:py-4 px-4 md:px-6 bg-white/5 hover:bg-violet-600/20 border border-white/10 rounded-xl md:rounded-2xl flex items-center justify-between group transition-all">
+                                    <div class="flex items-center gap-3 md:gap-4"><span class="text-2xl md:text-3xl group-hover:scale-110 transition-transform">👩‍🎓</span><span class="font-bold text-base md:text-lg text-white">Portal do Aluno</span></div><i data-lucide="chevron-right" class="text-slate-500 w-4 h-4 md:w-6 md:h-6"></i>
+                                </button>
+                                <button onclick="window.App.setView('loginMentor')" class="w-full py-3 md:py-4 px-4 md:px-6 bg-white/5 hover:bg-cyan-600/20 border border-white/10 rounded-xl md:rounded-2xl flex items-center justify-between group transition-all">
+                                    <div class="flex items-center gap-3 md:gap-4"><span class="text-2xl md:text-3xl group-hover:scale-110 transition-transform">👑</span><span class="font-bold text-base md:text-lg text-white">Portal da Mentora</span></div><i data-lucide="chevron-right" class="text-slate-500 w-4 h-4 md:w-6 md:h-6"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                else if(v === 'loginStudent') {
+                    const em = this.state.lastTypedEmail || localStorage.getItem('wg_s_em') || '';
+                    const pw = this.state.lastTypedPw || this.getSafePw('wg_s_pw');
+                    return `
+                    <div class="h-full w-full overflow-y-auto flex items-center justify-center p-3 sm:p-4 py-8 md:py-12 custom-scrollbar">
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] w-full max-w-[95%] sm:max-w-sm md:max-w-md shadow-2xl animate-fade-in my-auto">
+                            <button onclick="window.App.setView('select')" class="text-slate-400 hover:text-white flex items-center gap-2 mb-6 md:mb-8 text-sm md:text-base"><i data-lucide="chevron-left" class="w-4 h-4 md:w-5 md:h-5"></i> Voltar</button>
+                            <h2 class="text-2xl md:text-3xl font-extrabold text-white mb-2">Bem-vindo(a)!</h2>
+                            <p class="text-slate-400 text-sm md:text-base mb-6 md:mb-8">Seu foco é a sua maior arma. 🎯</p>
+                            ${err}
+                            <form onsubmit="window.App.loginStudent(event)" class="space-y-4 md:space-y-5">
+                                <div class="relative"><i data-lucide="mail" class="absolute left-3.5 top-3.5 text-slate-500 w-4 h-4 md:w-5 md:h-5"></i><input id="log-em" type="email" value="${em}" placeholder="E-mail" class="w-full glass-input rounded-xl py-2.5 md:py-3 pl-10 md:pl-12 pr-4 text-sm md:text-base" required /></div>
+                                <div class="relative">
+                                    <i data-lucide="lock" class="absolute left-3.5 top-3.5 text-slate-500 w-4 h-4 md:w-5 md:h-5"></i>
+                                    <input id="log-pw" type="password" value="${pw}" placeholder="Senha" class="w-full glass-input rounded-xl py-2.5 md:py-3 pl-10 md:pl-12 pr-10 text-sm md:text-base" required />
+                                    <button type="button" id="btn-log-pw" onclick="window.App.togglePassword('log-pw')" class="absolute right-3.5 top-3 text-slate-500 hover:text-white focus:outline-none"><i data-lucide="eye" class="w-4 h-4 md:w-5 md:h-5"></i></button>
+                                </div>
+                                <label class="flex items-center gap-2 cursor-pointer text-xs md:text-sm text-slate-300 w-fit"><input type="checkbox" id="log-rem" ${em?'checked':''} class="rounded border-white/20 bg-black/40"/> Lembrar meus dados</label>
+                                <button type="submit" id="btn-log-submit" class="w-full py-3 md:py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:brightness-110 rounded-xl text-white font-bold text-sm md:text-lg transition-all">Entrar na Mentoria</button>
+                            </form>
+                            <p class="text-center text-slate-400 mt-6 text-xs md:text-sm">Ainda não tem conta? <button type="button" onclick="window.App.setView('registerStudent')" class="text-violet-400 font-bold hover:underline">Cadastre-se</button></p>
+                        </div>
+                    </div>`;
+                }
+                else if(v === 'registerStudent') {
+                    let schedHtml = daysMap.map(d => `
+                        <div class="flex flex-col items-center bg-black/40 p-2 rounded-lg md:rounded-xl border border-white/10 w-[28%] sm:w-[85px] md:w-[90px] shadow-inner flex-grow-0">
+                            <span class="text-[9px] md:text-[10px] font-bold text-slate-300 mb-1 md:mb-2 uppercase">${d.label}</span>
+                            <div class="flex items-center justify-between w-full px-1">
+                                <button type="button" onclick="window.App.updateSchedVal('${d.key}', -1)" class="w-5 h-5 md:w-6 md:h-6 rounded-full bg-white/10 text-white font-black hover:bg-rose-500 flex items-center justify-center">-</button>
+                                <span id="sch-${d.key}" class="font-black text-white text-xs md:text-sm">${this.state.schedule[d.key]||0}h</span>
+                                <button type="button" onclick="window.App.updateSchedVal('${d.key}', 1)" class="w-5 h-5 md:w-6 md:h-6 rounded-full bg-white/10 text-white font-black hover:bg-emerald-500 flex items-center justify-center">+</button>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    return `
+                    <div class="h-full w-full overflow-y-auto flex items-center justify-center p-2 sm:p-4 py-8 custom-scrollbar">
+                        <div class="glass-panel p-5 md:p-10 rounded-2xl md:rounded-[2.5rem] w-full max-w-[95%] md:max-w-3xl shadow-2xl animate-fade-in my-auto">
+                            <button onclick="window.App.setView('loginStudent')" class="text-slate-400 hover:text-white flex items-center gap-2 mb-4 md:mb-6 text-xs md:text-sm"><i data-lucide="chevron-left" class="w-4 h-4"></i> Voltar</button>
+                            <h2 class="text-xl md:text-2xl font-extrabold text-white mb-1 md:mb-2">Criar Perfil</h2>
+                            <p class="text-slate-400 mb-4 md:mb-6 text-xs md:text-sm">Preencha para a mentora gerar seu cronograma.</p>
+                            ${err}
+                            <form onsubmit="window.App.registerStudent(event)" class="space-y-4 md:space-y-5">
+                                <div class="flex justify-center mb-2">
+                                    <div class="relative w-16 h-16 md:w-24 md:h-24 rounded-full bg-slate-800 border-2 border-dashed border-slate-500 flex items-center justify-center cursor-pointer overflow-hidden group" onclick="document.getElementById('reg-av').click()">
+                                        <input type="file" id="reg-av" onchange="window.App.uploadAvatar(this, 'reg')" accept="image/*" class="hidden"/>
+                                        <div id="reg-av-display" class="absolute inset-0 w-full h-full pointer-events-none">${this.state.regAvatarUrl ? `<img src="${this.state.regAvatarUrl}" class="w-full h-full object-cover"/>` : `<div class="w-full h-full flex items-center justify-center"><i data-lucide="upload-cloud" class="text-slate-400 w-6 h-6 md:w-8 md:h-8 group-hover:text-violet-400"></i></div>`}</div>
+                                        <div class="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><span class="text-[8px] md:text-[10px] text-white font-bold uppercase text-center leading-tight">Escolher<br/>Foto</span></div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                                    <div class="relative"><i data-lucide="user" class="absolute left-3 top-2.5 md:top-3 text-slate-500 w-4 h-4"></i><input id="reg-nm" type="text" placeholder="Nome Completo" required class="w-full glass-input rounded-xl py-2 md:py-3 pl-9 md:pl-10 pr-3 text-xs md:text-sm" /></div>
+                                    <div class="relative"><i data-lucide="briefcase" class="absolute left-3 top-2.5 md:top-3 text-slate-500 w-4 h-4"></i><input id="reg-ex" type="text" placeholder="Concurso Alvo (Ex: INSS)" required class="w-full glass-input rounded-xl py-2 md:py-3 pl-9 md:pl-10 pr-3 text-xs md:text-sm" /></div>
+                                    <div class="relative"><input id="reg-ag" type="number" placeholder="Idade" min="16" max="99" required class="w-full glass-input rounded-xl py-2 md:py-3 px-3 text-xs md:text-sm text-center" /></div>
+                                    <div class="relative"><i data-lucide="mail" class="absolute left-3 top-2.5 md:top-3 text-slate-500 w-4 h-4"></i><input id="reg-em" type="email" placeholder="E-mail" required class="w-full glass-input rounded-xl py-2 md:py-3 pl-9 md:pl-10 pr-3 text-xs md:text-sm"/></div>
+                                </div>
+                                <div class="p-3 md:p-5 bg-slate-900/50 rounded-xl md:rounded-2xl border border-violet-500/30">
+                                    <p class="text-xs md:text-sm text-violet-300 font-bold uppercase tracking-wider mb-3 text-center flex items-center justify-center gap-1"><i data-lucide="clock-4" class="w-3 h-3 md:w-4 md:h-4"></i> Horas Disponíveis Diariamente</p>
+                                    <div class="flex flex-wrap justify-center gap-2">${schedHtml}</div>
+                                </div>
+                                <div class="relative">
+                                    <i data-lucide="lock" class="absolute left-3 top-2.5 md:top-3 text-slate-500 w-4 h-4"></i>
+                                    <input id="reg-pw" type="password" placeholder="Criar Senha (Mín. 6 chars)" required class="w-full glass-input rounded-xl py-2 md:py-3 pl-9 md:pl-10 pr-10 text-xs md:text-sm"/>
+                                    <button type="button" id="btn-reg-pw" onclick="window.App.togglePassword('reg-pw')" class="absolute right-3 top-2.5 md:top-3 text-slate-500 hover:text-white"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                                </div>
+                                <button type="submit" id="btn-reg-submit" class="w-full py-3 md:py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:brightness-110 rounded-xl text-white font-bold text-sm md:text-lg">Concluir Cadastro 🚀</button>
+                            </form>
+                        </div>
+                    </div>`;
+                }
+                else if(v === 'loginMentor') {
+                    const em = this.state.lastTypedEmail || localStorage.getItem('wg_m_em') || 'wanessa@mentoriawg.com';
+                    const pw = this.state.lastTypedPw || this.getSafePw('wg_m_pw') || 'master123';
+                    const savedAvatar = localStorage.getItem('wg_mentor_avatar') || teacherImage;
+                    return `
+                    <div class="h-full w-full overflow-y-auto flex items-center justify-center p-3 sm:p-4 py-12 custom-scrollbar">
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] w-full max-w-[95%] sm:max-w-sm md:max-w-md shadow-2xl text-center animate-fade-in my-auto relative">
+                            <button onclick="window.App.setView('select')" class="text-slate-400 hover:text-white flex items-center gap-1 md:gap-2 mb-4 md:mb-6 absolute top-4 left-4 md:top-6 md:left-6 text-xs md:text-sm"><i data-lucide="chevron-left" class="w-4 h-4 md:w-5 md:h-5"></i> Voltar</button>
+                            <div class="w-20 h-20 md:w-24 md:h-24 mx-auto rounded-full overflow-hidden border-2 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] mb-4 md:mb-6 mt-6 md:mt-8">
+                                <img src="${savedAvatar}" onerror="this.src='${fallbackImage}'" class="w-full h-full object-cover" />
+                            </div>
+                            <h2 class="text-2xl md:text-3xl font-extrabold text-white mb-2">Olá, Wanessa!</h2>
+                            <p class="text-slate-400 mb-6 md:mb-8 text-sm md:text-base">Pronta para guiar a sua turma hoje?</p>
+                            ${err}
+                            <form onsubmit="window.App.loginMentor(event)" class="space-y-4 md:space-y-5">
+                                <div class="relative"><i data-lucide="mail" class="absolute left-3.5 top-3.5 text-slate-500 w-4 h-4 md:w-5 md:h-5"></i><input id="men-em" type="email" placeholder="E-mail da Mentora" value="${em}" class="w-full glass-input rounded-xl py-2.5 md:py-3 pl-10 md:pl-12 pr-4 text-center text-sm md:text-base" required /></div>
+                                <div class="relative">
+                                    <i data-lucide="lock" class="absolute left-3.5 top-3.5 text-slate-500 w-4 h-4 md:w-5 md:h-5"></i>
+                                    <input id="men-pw" type="password" placeholder="Senha Mestre" value="${pw}" class="w-full glass-input rounded-xl py-2.5 md:py-3 pl-10 md:pl-12 pr-10 text-center tracking-widest text-sm md:text-base" required />
+                                    <button type="button" id="btn-men-pw" onclick="window.App.togglePassword('men-pw')" class="absolute right-3.5 top-3 text-slate-500 hover:text-white focus:outline-none"><i data-lucide="eye" class="w-4 h-4 md:w-5 md:h-5"></i></button>
+                                </div>
+                                <label class="flex items-center justify-center gap-2 cursor-pointer text-xs md:text-sm text-slate-300 w-fit mx-auto"><input type="checkbox" id="men-rem" ${em?'checked':''} class="rounded bg-black/40 border-white/20 text-cyan-500" /> Lembrar meus dados</label>
+                                <button type="submit" id="btn-men-submit" class="w-full py-3 md:py-3.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:brightness-110 rounded-xl text-white font-bold text-sm md:text-lg">Acessar Painel</button>
+                            </form>
+                        </div>
+                    </div>`;
+                }
+            },
+
+            getPendingHtml: function() {
+                const u = this.state.userData;
+                return `
+                <div class="h-full w-full overflow-y-auto flex items-center justify-center p-4 py-12 custom-scrollbar">
+                    <div class="glass-panel p-6 md:p-12 rounded-[2rem] md:rounded-[2.5rem] w-full max-w-[95%] sm:max-w-md relative z-10 text-center shadow-xl animate-fade-in my-auto">
+                        <div class="w-20 h-20 md:w-24 md:h-24 mx-auto bg-amber-500/20 border border-amber-500/50 rounded-full flex items-center justify-center mb-6 md:mb-8"><i data-lucide="clock-4" class="text-amber-400 w-10 h-10 md:w-12 md:h-12"></i></div>
+                        <h2 class="text-2xl md:text-3xl font-extrabold text-white mb-4">Conta em Análise</h2>
+                        <p class="text-slate-300 mb-6 md:mb-8 text-sm md:text-base leading-relaxed">Olá, ${u.name.split(' ')[0]}!<br/>A <strong class="text-violet-300">Mentora Wanessa Guedes</strong> irá avaliar o seu acesso em breve. Retorne mais tarde!</p>
+                        <button onclick="window.App.logout()" class="w-full py-3 md:py-3.5 bg-white/10 hover:bg-white/20 rounded-xl text-white font-bold text-sm md:text-base">Sair da Conta</button>
+                    </div>
+                </div>`;
+            },
+
+            getMentorHtml: function() {
+                const m = this.state.userData;
+                const mAvatar = m.avatarUrl || localStorage.getItem('wg_mentor_avatar') || teacherImage;
+                const tab = this.state.activeTab;
+                
+                const navItems = [
+                    { id: 'dashboard', label: 'Visão da Turma' },
+                    { id: 'classes', label: 'Registrar Aulas' }
+                ];
+
+                const actStudents = this.state.students.filter(s=>s.status==='active');
+                const pendStudents = this.state.students.filter(s=>s.status==='pending');
+                const pCount = pendStudents.length;
+
+                const sidebar = `
+                <aside class="fixed inset-y-0 left-0 z-50 w-64 md:w-72 glass-panel border-r border-white/10 shadow-2xl transform transition-transform duration-300 md:relative md:translate-x-0 flex flex-col ${this.state.isMenuOpen ? 'translate-x-0' : '-translate-x-full'}">
+                    <div class="p-6 md:p-8 border-b border-white/5 text-center bg-slate-900/40 relative">
+                        <div class="absolute top-4 left-4"><button onclick="document.getElementById('men-logo-upload').click()" class="w-8 h-8 bg-black/40 rounded-lg flex items-center justify-center hover:bg-violet-600 border border-white/10" title="Mudar Logo"><i data-lucide="camera" class="text-white w-4 h-4"></i></button><input type="file" id="men-logo-upload" onchange="window.App.uploadLogo(this)" class="hidden" accept="image/*"/></div>
+                        <button class="md:hidden absolute top-4 right-4 text-slate-300 hover:text-white" onclick="window.App.toggleMenu()"><i data-lucide="x" class="w-5 h-5"></i></button>
+                        
+                        <div class="w-20 h-20 md:w-24 md:h-24 mx-auto rounded-full overflow-hidden border-2 md:border-4 border-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.5)] mb-3 md:mb-4 mt-6 md:mt-4 relative group cursor-pointer" onclick="document.getElementById('men-avatar-upload').click()">
+                            <input type="file" id="men-avatar-upload" onchange="window.App.uploadAvatar(this, 'mentor')" accept="image/*" class="hidden" />
+                            <img src="${mAvatar}" onerror="this.src='${fallbackImage}'" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            <div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100"><i data-lucide="upload-cloud" class="text-white mb-1 w-5 h-5"></i><span class="text-[9px] text-white font-bold uppercase">Foto</span></div>
+                        </div>
+                        <h2 class="font-extrabold text-white text-lg md:text-xl">${m.name}</h2>
+                        <p class="text-cyan-300 text-[9px] md:text-[10px] font-black uppercase tracking-widest mt-1 bg-cyan-900/40 py-1 rounded-full border border-cyan-500/30 inline-block px-3">👑 Painel da Mentora</p>
+                    </div>
+                    <nav class="p-3 md:p-4 space-y-2 md:space-y-3 flex-1">
+                        <button onclick="window.App.setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 md:px-5 md:py-4 rounded-xl md:rounded-2xl font-bold relative text-sm md:text-base ${tab==='dashboard'?'bg-cyan-500/30 text-white border border-cyan-400/50 shadow-[inset_0_0_20px_rgba(6,182,212,0.2)]':'text-slate-300 hover:bg-white/10'}">
+                            <i data-lucide="users" class="w-5 h-5 ${tab==='dashboard'?'text-cyan-300':''}"></i> Visão da Turma
+                            ${pCount>0?`<span class="absolute right-3 bg-rose-500 text-white text-[10px] md:text-xs font-black px-2 py-0.5 rounded-full animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.8)]">${pCount}</span>`:''}
+                        </button>
+                        <button onclick="window.App.setTab('classes')" class="w-full flex items-center gap-3 px-4 py-3 md:px-5 md:py-4 rounded-xl md:rounded-2xl font-bold relative text-sm md:text-base ${tab==='classes'?'bg-violet-500/30 text-white border border-violet-400/50 shadow-[inset_0_0_20px_rgba(139,92,246,0.2)]':'text-slate-300 hover:bg-white/10'}">
+                            <i data-lucide="video" class="w-5 h-5 ${tab==='classes'?'text-violet-300':''}"></i> Registrar Aulas
+                        </button>
+                    </nav>
+                    <div class="p-4 border-t border-white/5 bg-slate-900/40 hidden md:block"><button onclick="window.App.logout()" class="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-rose-300 hover:text-white hover:bg-rose-500/20 rounded-xl transition-colors"><i data-lucide="log-out" class="w-4 h-4"></i> Sair da Conta</button></div>
+                </aside>`;
+
+                let content = '';
+                if(this.state.selectedStudentId) {
+                    const stu = this.state.students.find(s=>s.id === this.state.selectedStudentId);
+                    
+                    const msgs = (stu.mentorMessages || []).map(msg => `
+                        <div class="flex ${msg.role==='mentor'?'justify-end':'justify-start'}">
+                            <div class="flex flex-col gap-1 max-w-[90%] md:max-w-[70%]">
+                                <div class="p-3 md:p-5 rounded-2xl md:rounded-3xl shadow-[0_5px_15px_rgba(0,0,0,0.3)] backdrop-blur-xl ${msg.role==='mentor'?'bg-gradient-to-br from-cyan-600 to-blue-600 text-white rounded-br-sm':'bg-slate-800/90 border border-white/10 text-slate-100 rounded-bl-sm'}">
+                                    <p class="whitespace-pre-wrap font-medium text-sm md:text-base">${msg.text}</p>
+                                </div>
+                                <span class="text-[9px] md:text-[10px] text-slate-500 font-bold ${msg.role==='mentor'?'text-right mr-2':'text-left ml-2'}">${this.formatDateTimeBR(msg.date)}</span>
+                            </div>
+                        </div>
+                    `).join('') || '<p class="text-center text-slate-500 mt-10 text-sm">Nenhuma mensagem registrada ainda.</p>';
+
+                    let draftHtml = '';
+                    let activeScheduleHtml = '';
+
+                    if (stu.generatedSchedule && stu.generatedSchedule.length > 0) {
+                        
+                        let deleteBtnHtml = '';
+                        if (this.state.confirmDeleteId === stu.id) {
+                            deleteBtnHtml = `
+                            <div class="flex items-center gap-2 animate-fade-in bg-rose-950/80 p-1.5 md:p-2 rounded-xl border border-rose-500/50">
+                                <span class="text-white text-[10px] md:text-xs font-bold px-2 hidden sm:inline">Excluir tudo?</span>
+                                <button onclick="window.App.deleteStudentSchedule('${stu.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 md:px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-[0_0_10px_rgba(225,29,72,0.4)] flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 md:w-4 md:h-4"></i> Sim, Excluir</button>
+                                <button onclick="window.App.state.confirmDeleteId = null; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors"><i data-lucide="x" class="w-3 h-3 md:w-4 md:h-4"></i></button>
+                            </div>`;
+                        } else {
+                            deleteBtnHtml = `
+                            <button onclick="window.App.state.confirmDeleteId = '${stu.id}'; window.App.render();" class="w-full md:w-auto bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(225,29,72,0.4)]">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i> Excluir Cronograma Atual
+                            </button>`;
+                        }
+
+                        activeScheduleHtml = `
+                        <div class="bg-emerald-900/20 border border-emerald-500/30 p-4 md:p-5 rounded-xl md:rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                            <div class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-emerald-400"></i><span class="text-emerald-300 font-bold text-sm md:text-base">Cronograma Ativo</span></div>
+                            ${deleteBtnHtml}
+                        </div>
+                        <div class="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mt-4 bg-black/20 p-2 rounded-xl border border-white/5">
+                            ${stu.generatedSchedule.map(t => {
+                                const color = t.type==='teoria' ? 'violet' : t.type==='revisao' ? 'amber' : 'emerald';
+                                return `
+                                <div class="bg-black/40 p-3 rounded-xl border border-white/5 flex gap-3">
+                                    <div class="bg-${color}-500/20 p-2 rounded-lg h-fit border border-${color}-500/30"><i data-lucide="book-open" class="text-${color}-400 w-4 h-4"></i></div>
+                                    <div>
+                                        <span class="text-[10px] text-${color}-400 font-bold uppercase tracking-wider">${this.formatDateBR(t.date)}</span>
+                                        <p class="text-white text-xs md:text-sm font-medium mt-1 leading-relaxed">${t.topic}</p>
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                        <hr class="border-white/10 my-8"/>
+                        <h4 class="text-white font-bold text-lg md:text-xl mb-2 flex items-center gap-2"><i data-lucide="refresh-cw" class="w-5 h-5 text-cyan-400"></i> Simular Novo Cronograma</h4>
+                        <p class="text-slate-400 text-xs md:text-sm mb-4 leading-relaxed">Gere um novo cronograma estruturado abaixo. Ao confirmar, ele substituirá o atual imediatamente.</p>
+                        `;
+                    }
+
+                    if (this.state.parsedBlocks) {
+                        draftHtml = activeScheduleHtml + `
+                        <div class="bg-slate-900/80 border border-violet-500/30 p-4 md:p-6 rounded-xl md:rounded-2xl animate-fade-in shadow-[0_0_30px_rgba(139,92,246,0.1)]">
+                            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/10 pb-4">
+                                <div>
+                                    <h4 class="text-white font-bold text-lg">Revisão Final dos Blocos Inquebráveis</h4>
+                                    <p class="text-slate-400 text-xs mt-1"><strong>A Regra de Ouro foi aplicada:</strong> O Motor de Inteligência agrupou a hierarquia. Cada card gerará exatos Blocos de 1 Hora Exclusivos (Teoria -> Rev -> Questões).</p>
+                                </div>
+                                <button onclick="window.App.addNewBlock()" class="bg-violet-600 hover:bg-violet-500 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white transition-colors shadow-lg flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4"></i> Inserir Bloco Adicional</button>
+                            </div>
+
+                            <div class="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2" id="blocks-editor-list">
+                                ${this.state.parsedBlocks.map((b, i) => `
+                                    <div class="bg-slate-800/80 border border-slate-600 rounded-xl p-4 flex flex-col gap-3 relative shadow-md hover:border-violet-500 transition-colors">
+                                        <div class="flex justify-between items-center">
+                                            <input type="text" class="w-2/3 bg-transparent border-b border-slate-500 focus:border-cyan-400 py-1 text-sm font-bold text-cyan-300 uppercase outline-none transition-colors" value="${b.discipline}" onchange="window.App.updateParsedBlock('${b.id}', 'discipline', this.value)"/>
+                                            <button onclick="window.App.removeParsedBlock('${b.id}')" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/20 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                        </div>
+                                        <textarea class="w-full bg-slate-900 border border-slate-700 text-slate-200 p-3 rounded-lg text-sm leading-relaxed custom-scrollbar h-24 outline-none focus:border-violet-500 transition-colors" onchange="window.App.updateParsedBlock('${b.id}', 'content', this.value)">${b.content}</textarea>
+                                    </div>
+                                `).join('')}
+                            </div>
+
+                            <div class="flex flex-col md:flex-row gap-3 mt-6 pt-6 border-t border-white/10">
+                                <button onclick="window.App.state.parsedBlocks = null; window.App.render()" class="bg-slate-800 text-slate-300 px-6 py-3.5 rounded-xl font-bold hover:bg-slate-700 hover:text-white transition-colors text-sm md:text-base">Voltar para Edição</button>
+                                <button onclick="window.App.finalizeSchedule('${stu.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm md:text-base"><i data-lucide="check-circle" class="w-5 h-5"></i> Salvar e Enviar Cronograma ao Aluno</button>
+                            </div>
+                        </div>
+                        `;
+                    } else {
+                        draftHtml = activeScheduleHtml + `
+                        <div class="bg-slate-900/60 p-4 md:p-6 rounded-2xl border border-white/5 shadow-lg">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-white font-bold text-lg">Cadastro Hierárquico por Disciplina</h3>
+                                <button onclick="window.App.addEditalForm()" class="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-colors">+ Adicionar Disciplina</button>
+                            </div>
+                            <p class="text-slate-400 text-xs md:text-sm mb-6 leading-relaxed">A inteligência unificará os assuntos hierárquicos (ex: o pai 1 e seus filhos 1.1, 1.2) automaticamente em <strong>blocos inquebráveis de 1 Hora</strong>.</p>
+                            
+                            <div class="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2 mb-6" id="edital-forms-list">
+                                ${this.state.editalForms.map((f, idx) => `
+                                    <div class="bg-black/40 border border-white/10 rounded-xl p-4 relative group">
+                                        ${this.state.editalForms.length > 1 ? `<button type="button" onclick="window.App.removeEditalForm(${f.id})" class="absolute top-4 right-4 text-rose-500 hover:bg-rose-500/20 p-1.5 rounded-md transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                                        <input type="text" class="w-full md:w-3/4 bg-transparent border-b border-slate-600 focus:border-cyan-400 text-cyan-300 font-bold uppercase text-sm md:text-base py-1 outline-none mb-3 transition-colors placeholder-slate-600" placeholder="NOME DA DISCIPLINA (Ex: DIREITO CONSTITUCIONAL)" value="${f.name}" onchange="window.App.updateEditalForm(${f.id}, 'name', this.value)"/>
+                                        <textarea class="w-full glass-input rounded-xl p-3 text-sm h-32 custom-scrollbar leading-relaxed outline-none focus:border-violet-500 transition-colors placeholder-slate-500" placeholder="Cole os assuntos com numeração...\nEx:\n5 Domínio da estrutura morfossintática do período.\n5.1 Emprego das classes de palavras.\n5.2 Relações de coordenação..." onchange="window.App.updateEditalForm(${f.id}, 'content', this.value)">${f.content}</textarea>
+                                    </div>
+                                `).join('')}
+                            </div>
+
+                            <div class="flex gap-2">
+                                <button onclick="window.App.processEditalForms()" class="flex-1 py-4 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold text-sm md:text-base transition-colors shadow-[0_0_15px_rgba(139,92,246,0.4)] flex justify-center items-center gap-2"><i data-lucide="sparkles" class="w-5 h-5"></i> Processar Inteligência e Simular Blocos</button>
+                            </div>
+                        </div>
+                        `;
+                    }
+
+                    let totalHours = 0; let totalTasks = 0; let globalAcertos = 0; let globalTotal = 0;
+                    if(stu.generatedSchedule) {
+                        stu.generatedSchedule.forEach(t => {
+                            if(t.completed) { totalHours += (t.duration/60); totalTasks++; }
+                        });
+                    }
+                    if(stu.performance) {
+                        Object.values(stu.performance).forEach(p => { globalAcertos += p.correct; globalTotal += p.total; });
+                    }
+                    const globalPct = globalTotal > 0 ? Math.round((globalAcertos/globalTotal)*100) : 0;
+
+                    const perfHtml = Object.entries(stu.performance || {}).map(([subj, data]) => {
+                        const pct = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
+                        const c = pct >= 70 ? 'emerald' : pct >= 50 ? 'amber' : 'rose';
+                        return `
+                        <div class="bg-black/40 p-4 rounded-xl border border-white/5">
+                            <div class="flex justify-between items-center mb-2"><span class="text-white font-bold text-sm md:text-base">${subj}</span><span class="text-${c}-400 font-black">${pct}%</span></div>
+                            <div class="w-full bg-slate-800 rounded-full h-1.5 mb-2"><div class="bg-${c}-500 h-1.5 rounded-full" style="width: ${pct}%"></div></div>
+                            <p class="text-[10px] md:text-xs text-slate-400">${data.correct} acertos de ${data.total} questões</p>
+                        </div>`;
+                    }).join('') || '<p class="text-slate-400 text-xs md:text-sm col-span-2">O aluno ainda não resolveu questões do cronograma.</p>';
+
+                    content = `
+                    <div class="animate-fade-in pb-10">
+                        <button onclick="window.App.selectStudent(null)" class="flex items-center gap-2 text-slate-300 hover:text-white mb-6 md:mb-8 bg-slate-900/60 px-4 md:px-5 py-2 md:py-2.5 rounded-full border border-white/10 font-bold text-xs md:text-sm transition-colors"><i data-lucide="arrow-left" class="w-4 h-4 md:w-5 md:h-5"></i> Voltar à Turma</button>
+                        
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-3xl border-white/20 flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start relative bg-slate-900/80 shadow-2xl">
+                            <div class="absolute right-0 top-0 w-64 h-64 md:w-96 md:h-96 bg-fuchsia-600/20 blur-[80px] md:blur-[100px] rounded-full pointer-events-none"></div>
+                            <div class="flex flex-col items-center gap-3 z-10">
+                                <div class="w-24 h-24 md:w-32 md:h-32 text-5xl md:text-8xl bg-slate-950/50 rounded-full border-2 md:border-4 border-white/10 flex items-center justify-center overflow-hidden">
+                                    ${stu.avatarUrl?`<img src="${stu.avatarUrl}" class="w-full h-full object-cover"/>`:stu.avatar||'🧑‍🎓'}
+                                </div>
+                                <span class="bg-slate-800 text-slate-300 text-[10px] md:text-xs px-3 py-1 rounded-full border border-white/10">${stu.age} anos</span>
+                            </div>
+                            <div class="flex-1 z-10 w-full text-center md:text-left">
+                                <h2 class="text-2xl md:text-4xl font-extrabold text-white mb-2">${stu.name}</h2>
+                                <div class="flex flex-wrap justify-center md:justify-start gap-2 md:gap-3 items-center mt-2 md:mt-3">
+                                    <span class="text-cyan-300 font-bold uppercase text-[10px] md:text-sm bg-cyan-900/40 px-2 md:px-3 py-1 rounded-md border border-cyan-500/30">🎯 ${stu.targetExam}</span>
+                                    <span class="text-slate-400 text-[10px] md:text-sm flex items-center gap-1"><i data-lucide="mail" class="w-3 h-3 md:w-[14px]"></i> ${stu.email}</span>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 md:mt-8">
+                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">🧠</span><p class="text-xl md:text-3xl font-black text-white">${globalPct}%</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Aproveitamento</p></div>
+                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">🔥</span><p class="text-xl md:text-3xl font-black text-white">${stu.streak||0}</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Ofensiva (Dias)</p></div>
+                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">⏳</span><p class="text-xl md:text-3xl font-black text-white">${Math.round(totalHours)}h</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Foco Total</p></div>
+                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">✅</span><p class="text-xl md:text-3xl font-black text-white">${totalTasks}</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Concluídas</p></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- INTELIGÊNCIA DE CRONOGRAMA -->
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-3xl border-white/10 shadow-xl bg-slate-900/80 mt-6 md:mt-8">
+                            <h3 class="text-lg md:text-2xl font-bold text-white mb-3 md:mb-4 flex items-center gap-2"><i data-lucide="brain-circuit" class="text-violet-400"></i> Motor de Cronograma (Neuro-SRS)</h3>
+                            ${draftHtml}
+                        </div>
+
+                        <!-- APROVEITAMENTO POR MATERIA -->
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-3xl border-white/10 shadow-xl bg-slate-900/80 mt-6 md:mt-8">
+                            <h3 class="text-lg md:text-2xl font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="text-cyan-400"></i> Aproveitamento em Questões</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${perfHtml}</div>
+                        </div>
+
+                        <!-- CHAT COM ALUNO -->
+                        <div class="glass-panel rounded-[2rem] md:rounded-3xl border-white/10 bg-slate-900/80 shadow-xl mt-6 md:mt-8 flex flex-col h-[calc(100dvh-120px)] md:h-[500px] overflow-hidden relative">
+                            <div class="absolute top-0 left-0 w-1.5 md:w-2 h-full bg-gradient-to-b from-cyan-400 to-blue-600"></div>
+                            <div class="p-4 md:p-6 border-b border-white/10 bg-black/20 z-10 flex items-center gap-3"><i data-lucide="message-square" class="text-cyan-400 w-5 h-5 md:w-6 md:h-6"></i><h3 class="text-lg md:text-xl font-bold text-white">Chat com ${stu.name.split(' ')[0]}</h3></div>
+                            <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6 z-10 custom-scrollbar">${msgs}<div id="chat-end"></div></div>
+                            <div class="p-3 md:p-5 bg-slate-950/80 border-t border-white/10 z-10">
+                                <form onsubmit="window.App.sendMsg(event, 'mentor', '${stu.id}')" class="flex gap-2 md:gap-3 relative bg-slate-900/80 rounded-2xl p-1.5 md:p-2 border border-white/20">
+                                    <input type="text" id="chat-inp" placeholder="Envie orientação ou resposta..." class="flex-1 bg-transparent px-3 py-2 text-white outline-none font-medium text-sm md:text-base" />
+                                    <button type="submit" class="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-cyan-600 hover:bg-cyan-500 flex items-center justify-center text-white"><i data-lucide="send" class="w-4 h-4 md:w-5 md:h-5"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>`;
+                } 
+                else if (this.state.activeTab === 'dashboard') {
+                    const pendHtml = pendStudents.length === 0 ? '' : `
+                        <div class="glass-panel p-5 md:p-6 rounded-2xl md:rounded-3xl border-2 border-amber-500/60 shadow-[0_0_30px_rgba(245,158,11,0.2)] bg-slate-900/90 mb-6 md:mb-10 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-amber-500/10 blur-2xl md:blur-3xl rounded-full"></div>
+                            <div class="flex items-center gap-3 mb-4 md:mb-6 relative z-10"><div class="p-2 md:p-3 bg-amber-500/20 rounded-lg md:rounded-xl text-amber-400"><i data-lucide="users" class="w-5 h-5 md:w-6 md:h-6"></i></div><h2 class="text-lg md:text-2xl font-bold text-white">Solicitações Pendentes</h2></div>
+                            <div class="space-y-3 md:space-y-4 relative z-10">
+                                ${pendStudents.map(s => `
+                                    <div class="flex flex-col md:flex-row items-center justify-between p-4 md:p-5 bg-black/40 border border-amber-500/20 rounded-xl md:rounded-2xl gap-3 md:gap-4">
+                                        <div class="flex items-center gap-3 md:gap-4 w-full md:w-auto">
+                                            <div class="w-12 h-12 md:w-16 md:h-16 bg-slate-800 rounded-full flex items-center justify-center text-xl md:text-3xl overflow-hidden border-2 border-amber-500/50">${s.avatarUrl?`<img src="${s.avatarUrl}" class="w-full h-full object-cover"/>`:s.avatar||'🧑🎓'}</div>
+                                            <div>
+                                                <h3 class="font-extrabold text-white text-base md:text-xl mb-0.5 md:mb-1">${s.name}</h3>
+                                                <div class="flex flex-wrap gap-1.5 md:gap-2 text-[10px] md:text-xs">
+                                                    <span class="bg-cyan-900/50 text-cyan-300 px-1.5 md:px-2 py-0.5 md:py-1 rounded border border-cyan-500/30">🎯 ${s.targetExam}</span>
+                                                    <span class="bg-slate-800 text-slate-300 px-1.5 md:px-2 py-0.5 md:py-1 rounded">${s.age} anos</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button onclick="window.App.approveStudent('${s.id}')" class="w-full md:w-auto px-6 md:px-8 py-2 md:py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg md:rounded-xl font-black transition-all flex items-center justify-center gap-2 text-sm md:text-base"><i data-lucide="check" class="w-4 h-4 md:w-5 md:h-5"></i> Aprovar</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>`;
+                    
+                    const actHtml = actStudents.map(s => `
+                        <div onclick="window.App.selectStudent('${s.id}')" class="glass-panel p-4 md:p-6 rounded-2xl md:rounded-3xl border-white/10 bg-slate-900/70 flex gap-4 md:gap-6 shadow-lg cursor-pointer hover:border-violet-500/50 transition-colors">
+                            <div class="text-3xl md:text-5xl bg-slate-800 w-14 h-14 md:w-20 md:h-20 rounded-full flex items-center justify-center border-2 border-white/20 shadow-inner overflow-hidden flex-shrink-0">${s.avatarUrl?`<img src="${s.avatarUrl}" class="w-full h-full object-cover"/>`:s.avatar||'🧑‍🎓'}</div>
+                            <div class="flex-1">
+                                <h3 class="text-lg md:text-xl font-extrabold text-white mb-1">${s.name}</h3>
+                                <p class="text-[10px] md:text-xs text-cyan-400 font-bold bg-cyan-900/30 px-2 py-1 rounded border border-cyan-500/20 inline-block mb-2 md:mb-3">${s.targetExam}</p>
+                                <div class="grid grid-cols-2 gap-2 text-xs md:text-sm">
+                                    <div class="bg-slate-950/60 p-1.5 md:p-2 rounded-lg md:rounded-xl text-center"><p class="text-slate-400 text-[8px] md:text-[10px] uppercase font-bold">Retenção</p><p class="font-black text-emerald-400">${s.retention||0}%</p></div>
+                                    <div class="bg-slate-950/60 p-1.5 md:p-2 rounded-lg md:rounded-xl text-center"><p class="text-slate-400 text-[8px] md:text-[10px] uppercase font-bold">Horas</p><p class="font-black text-white">${s.hours||0}h</p></div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') || '<div class="col-span-full text-center p-8 md:p-12 glass-panel rounded-2xl border-white/10 text-slate-400 text-sm md:text-base">Nenhum aluno ativo.</div>';
+
+                    content = `
+                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60"><h1 class="text-2xl md:text-4xl font-extrabold text-white mb-2 md:mb-3">Painel de Controle 📡</h1><p class="text-slate-300 text-sm md:text-lg">Acompanhe a sua turma de elite.</p></div>
+                        ${pendHtml}
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">${actHtml}</div>
+                    </div>`;
+                }
+                else if (this.state.activeTab === 'classes') {
+                    const eid = this.state.editingClassId;
+                    const cdel = this.state.confirmDeleteClassId;
+                    
+                    const clsHtml = this.state.classes.map(c => `
+                        <div class="flex flex-col md:flex-row items-center justify-between p-4 md:p-5 bg-black/40 border border-white/5 rounded-xl md:rounded-2xl gap-3 md:gap-4 hover:border-violet-500/30 group">
+                            <div class="w-full md:w-auto">
+                                <span class="text-[9px] md:text-[10px] text-emerald-300 font-bold uppercase tracking-wider bg-emerald-900/30 px-2 py-1 rounded mb-1 md:mb-2 flex items-center gap-1 w-fit border border-emerald-500/30"><i data-lucide="check-circle-2" class="w-3 h-3"></i> ${this.formatDateBR(c.date)}</span>
+                                <h3 class="font-bold text-white text-base md:text-lg leading-tight">${c.title}</h3><p class="text-slate-400 text-xs md:text-sm mt-0.5">${c.subject}</p>
+                            </div>
+                            <div class="flex gap-2 w-full md:w-auto mt-2 md:mt-0 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button type="button" onclick="window.App.editClass('${c.id}')" class="flex-1 md:flex-none p-2.5 md:p-3 bg-blue-500/10 text-blue-400 rounded-lg md:rounded-xl hover:bg-blue-500/20 flex items-center justify-center border border-blue-500/20"><i data-lucide="edit-2" class="w-4 h-4 md:w-5 md:h-5"></i></button>
+                                ${cdel === c.id ? `
+                                    <button type="button" onclick="window.App.confirmDeleteClass('${c.id}')" class="flex-1 md:flex-none p-2.5 md:p-3 bg-rose-600 text-white rounded-lg md:rounded-xl hover:bg-rose-50 flex items-center justify-center font-bold text-xs md:text-sm shadow-[0_0_15px_rgba(225,29,72,0.6)]">Confirmar?</button>
+                                    <button type="button" onclick="window.App.cancelDeleteClass()" class="p-2.5 md:p-3 bg-slate-800 text-slate-300 rounded-lg md:rounded-xl hover:bg-slate-700 flex items-center justify-center"><i data-lucide="x" class="w-4 h-4 md:w-5 md:h-5"></i></button>
+                                ` : `
+                                    <button type="button" onclick="window.App.deleteClass('${c.id}')" class="flex-1 md:flex-none p-2.5 md:p-3 bg-rose-500/10 text-rose-400 rounded-lg md:rounded-xl hover:bg-rose-500/20 flex items-center justify-center border border-rose-500/20"><i data-lucide="trash-2" class="w-4 h-4 md:w-5 md:h-5"></i></button>
+                                `}
+                            </div>
+                        </div>
+                    `).join('') || '<p class="text-slate-400 text-sm">Nenhuma aula registrada.</p>';
+
+                    content = `
+                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex gap-3 md:gap-4 items-center"><div class="p-3 md:p-4 bg-violet-500/20 rounded-xl md:rounded-2xl text-violet-400 border border-violet-500/30"><i data-lucide="calendar-plus" class="w-6 h-6 md:w-9 md:h-9"></i></div><div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Aulas</h1><p class="text-slate-300 text-xs md:text-sm">Gerencie os encontros da mentoria.</p></div></div>
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+                            <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border border-violet-500/30 bg-slate-900/80 h-fit">
+                                <h2 class="text-lg md:text-xl font-bold text-white mb-4 md:mb-6 flex justify-between items-center">${eid?'Editar Aula':'Nova Aula'} ${eid?`<button type="button" onclick="window.App.state.editingClassId=null; document.getElementById('cls-form').reset(); window.App.render()" class="text-[10px] md:text-xs text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20 hover:bg-rose-500/20">Cancelar</button>`:''}</h2>
+                                <form id="cls-form" onsubmit="window.App.saveClass(event)" class="space-y-3 md:space-y-4">
+                                    <div><label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Título</label><input id="cls-title" required type="text" class="w-full glass-input rounded-lg md:rounded-xl py-2 md:py-3 px-3 md:px-4 text-sm" /></div>
+                                    <div><label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Disciplina</label><input id="cls-subj" required type="text" class="w-full glass-input rounded-lg md:rounded-xl py-2 md:py-3 px-3 md:px-4 text-sm" /></div>
+                                    <div><label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Data</label><input id="cls-date" required type="date" class="w-full glass-input rounded-lg md:rounded-xl py-2 md:py-3 px-3 md:px-4 text-sm" /></div>
+                                    <button id="btn-save-class" type="submit" class="w-full py-3 md:py-3.5 mt-2 md:mt-4 rounded-lg md:rounded-xl text-white font-bold text-sm md:text-base flex justify-center ${eid?'bg-amber-600':'bg-gradient-to-r from-violet-600 to-fuchsia-600'}">${eid?'Atualizar Aula':'Registrar Aula'}</button>
+                                </form>
+                            </div>
+                            <div class="lg:col-span-2 glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 bg-slate-900/60"><h2 class="text-lg md:text-xl font-bold text-white mb-4 md:mb-6 flex items-center gap-2"><i data-lucide="book-open" class="text-emerald-400 w-5 h-5"></i> Histórico</h2><div class="space-y-3 md:space-y-4">${clsHtml}</div></div>
+                        </div>
+                    </div>`;
+                }
+
+                return `
+                <div class="flex h-full w-full bg-transparent">
+                    ${sidebar}
+                    <main class="flex-1 flex flex-col h-[100dvh] relative">
+                        <header class="glass-panel border-b border-white/5 p-3 flex items-center justify-between z-40 md:hidden">
+                            <div class="flex items-center gap-3"><button onclick="window.App.toggleMenu()" class="text-slate-200"><i data-lucide="menu" class="w-5 h-5"></i></button><h2 class="text-base font-bold text-white">${navItems.find(i=>i.id===tab)?.label||'Painel'}</h2></div>
+                            <button onclick="window.App.logout()" class="text-rose-400 bg-rose-500/10 p-1.5 rounded-md border border-rose-500/20"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+                        </header>
+                        <div class="flex-1 overflow-y-auto p-4 md:p-8 z-10 custom-scrollbar"><div class="max-w-6xl mx-auto h-full">${content}</div></div>
+                    </main>
+                </div>`;
+            },
+
+            getStudentHtml: function() {
+                const u = this.state.userData;
+                const tab = this.state.activeTab;
+                const uAvatar = u.avatarUrl || '🧑‍🎓';
+
+                const navItems = [
+                    { id: 'dashboard', label: 'Meu Painel', icon: 'layout-dashboard' },
+                    { id: 'schedule', label: 'Cronograma', icon: 'calendar' },
+                    { id: 'flashcards', label: 'Revisão Espaçada', icon: 'layers' },
+                    { id: 'profile', label: 'Meu Perfil', icon: 'user' }
+                ];
+
+                const sidebar = `
+                <aside class="fixed inset-y-0 left-0 z-50 w-64 md:w-72 glass-panel border-r border-white/10 shadow-2xl transform transition-transform duration-300 md:relative md:translate-x-0 flex flex-col ${this.state.isMenuOpen ? 'translate-x-0' : '-translate-x-full'}">
+                    <div class="p-6 md:p-8 border-b border-white/5 text-center bg-slate-900/40 relative">
+                        <button class="md:hidden absolute top-4 right-4 text-slate-300 hover:text-white" onclick="window.App.toggleMenu()"><i data-lucide="x" class="w-5 h-5"></i></button>
+                        <div class="w-20 h-20 md:w-24 md:h-24 mx-auto rounded-full overflow-hidden border-2 md:border-4 border-violet-500 shadow-[0_0_30px_rgba(139,92,246,0.5)] mb-3 md:mb-4 mt-6 md:mt-4 relative group cursor-pointer" onclick="document.getElementById('stu-avatar-upload').click()">
+                            <input type="file" id="stu-avatar-upload" onchange="window.App.uploadAvatar(this, 'student')" accept="image/*" class="hidden" />
+                            ${u.avatarUrl ? `<img src="${u.avatarUrl}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />` : `<div class="w-full h-full bg-slate-800 flex items-center justify-center text-4xl">${uAvatar}</div>`}
+                            <div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100"><i data-lucide="upload-cloud" class="text-white mb-1 w-5 h-5"></i><span class="text-[9px] text-white font-bold uppercase">Foto</span></div>
+                        </div>
+                        <h2 class="font-extrabold text-white text-lg md:text-xl">${u.name.split(' ')[0]}</h2>
+                        <p class="text-violet-300 text-[9px] md:text-[10px] font-black uppercase tracking-widest mt-1 bg-violet-900/40 py-1 rounded-full border border-violet-500/30 inline-block px-3">Portal do Aluno</p>
+                    </div>
+                    <nav class="p-3 md:p-4 space-y-2 md:space-y-3 flex-1">
+                        ${navItems.map(item => `
+                            <button onclick="window.App.setTab('${item.id}')" class="w-full flex items-center gap-3 px-4 py-3 md:px-5 md:py-4 rounded-xl md:rounded-2xl font-bold relative text-sm md:text-base ${tab===item.id?'bg-violet-500/30 text-white border border-violet-400/50 shadow-[inset_0_0_20px_rgba(139,92,246,0.2)]':'text-slate-300 hover:bg-white/10'}">
+                                <i data-lucide="${item.icon}" class="w-5 h-5 ${tab===item.id?'text-violet-300':''}"></i> ${item.label}
+                            </button>
+                        `).join('')}
+                    </nav>
+                    <div class="p-4 border-t border-white/5 bg-slate-900/40 hidden md:block"><button onclick="window.App.logout()" class="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-rose-300 hover:text-white hover:bg-rose-500/20 rounded-xl transition-colors"><i data-lucide="log-out" class="w-4 h-4"></i> Sair da Conta</button></div>
+                </aside>`;
+
+                let content = '';
+
+                if (tab === 'dashboard') {
+                    const today = new Date();
+                    const offset = today.getTimezoneOffset() * 60000;
+                    const todayStr = (new Date(today.getTime() - offset)).toISOString().split('T')[0];
+
+                    const scheduleToday = (u.generatedSchedule || []).filter(t => t.date === todayStr);
+                    const scheduleHtml = scheduleToday.length > 0 ? scheduleToday.map(t => this._renderTaskRow(t)).join('') : '<p class="text-slate-400 text-sm">Nenhuma tarefa programada para hoje. Aproveite o descanso!</p>';
+
+                    let totalHours = 0; let totalTasks = 0; let globalAcertos = 0; let globalTotal = 0;
+                    if(u.generatedSchedule) {
+                        u.generatedSchedule.forEach(t => {
+                            if(t.completed) { totalHours += (t.duration/60); totalTasks++; }
+                        });
+                    }
+                    if(u.performance) {
+                        Object.values(u.performance).forEach(p => { globalAcertos += p.correct; globalTotal += p.total; });
+                    }
+                    const globalPct = globalTotal > 0 ? Math.round((globalAcertos/globalTotal)*100) : 0;
+
+                    // MENSAGENS DO CHAT DA MENTORA PARA O ALUNO
+                    const chatMsgs = (u.mentorMessages || []).map(msg => `
+                        <div class="flex ${msg.role==='student'?'justify-end':'justify-start'}">
+                            <div class="flex flex-col gap-1 max-w-[90%] md:max-w-[70%]">
+                                <div class="p-3 md:p-4 rounded-2xl md:rounded-3xl shadow-[0_5px_15px_rgba(0,0,0,0.3)] backdrop-blur-xl ${msg.role==='student'?'bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white rounded-br-sm':'bg-slate-800/90 border border-white/10 text-slate-100 rounded-bl-sm'}">
+                                    <p class="whitespace-pre-wrap font-medium text-sm md:text-base">${msg.text}</p>
+                                </div>
+                                <span class="text-[9px] md:text-[10px] text-slate-500 font-bold ${msg.role==='student'?'text-right mr-2':'text-left ml-2'}">${this.formatDateTimeBR(msg.date)}</span>
+                            </div>
+                        </div>
+                    `).join('') || '<p class="text-center text-slate-500 mt-10 text-sm">Nenhuma mensagem. Mande um "Olá" para sua mentora!</p>';
+
+                    const studentChatHtml = `
+                    <div class="glass-panel rounded-[2rem] md:rounded-3xl border-white/10 bg-slate-900/80 shadow-xl mt-6 md:mt-8 flex flex-col h-[400px] md:h-[450px] overflow-hidden relative">
+                        <div class="absolute top-0 left-0 w-1.5 md:w-2 h-full bg-gradient-to-b from-violet-400 to-fuchsia-600"></div>
+                        <div class="p-4 md:p-6 border-b border-white/10 bg-black/20 z-10 flex items-center gap-3">
+                            <i data-lucide="message-square" class="text-violet-400 w-5 h-5 md:w-6 md:h-6"></i>
+                            <h3 class="text-lg md:text-xl font-bold text-white">Chat com a Mentora</h3>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6 z-10 custom-scrollbar">
+                            ${chatMsgs}
+                            <div id="chat-end"></div>
+                        </div>
+                        <div class="p-3 md:p-5 bg-slate-950/80 border-t border-white/10 z-10">
+                            <form onsubmit="window.App.sendMsg(event, 'student', '${u.id}')" class="flex gap-2 md:gap-3 relative bg-slate-900/80 rounded-2xl p-1.5 md:p-2 border border-white/20">
+                                <input type="text" id="chat-inp" placeholder="Envie sua dúvida ou atualização..." class="flex-1 bg-transparent px-3 py-2 text-white outline-none font-medium text-sm md:text-base" />
+                                <button type="submit" class="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-violet-600 hover:bg-violet-500 flex items-center justify-center text-white transition-colors"><i data-lucide="send" class="w-4 h-4 md:w-5 md:h-5"></i></button>
+                            </form>
+                        </div>
+                    </div>`;
+
+                    content = `
+                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                            <div>
+                                <h1 class="text-2xl md:text-4xl font-extrabold text-white mb-1 md:mb-2">Olá, ${u.name.split(' ')[0]}! 🚀</h1>
+                                <p class="text-slate-300 text-sm md:text-base">Seu foco atual: <strong class="text-cyan-400">${u.targetExam}</strong></p>
+                            </div>
+                            <div class="flex gap-4">
+                                <div class="text-center bg-black/40 p-3 rounded-xl border border-white/5"><span class="block text-2xl mb-1">🔥</span><span class="text-white font-black text-xl">${u.streak || 0}</span><p class="text-[10px] text-slate-400 font-bold uppercase">Dias</p></div>
+                                <div class="text-center bg-black/40 p-3 rounded-xl border border-white/5"><span class="block text-2xl mb-1">🧠</span><span class="text-white font-black text-xl">${globalPct}%</span><p class="text-[10px] text-slate-400 font-bold uppercase">Acertos</p></div>
+                            </div>
+                        </div>
+                        
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60">
+                            <div class="flex justify-between items-center mb-6">
+                                <h2 class="text-lg md:text-xl font-bold text-white flex items-center gap-2"><i data-lucide="target" class="text-violet-400 w-5 h-5"></i> Missões de Hoje</h2>
+                                <button onclick="window.App.setTab('schedule')" class="text-violet-400 hover:text-white text-xs md:text-sm font-bold">Ver Tudo</button>
+                            </div>
+                            <div class="space-y-3">${scheduleHtml}</div>
+                        </div>
+
+                        ${studentChatHtml}
+                    </div>`;
+                } else if (tab === 'schedule') {
+                    const sched = u.generatedSchedule || [];
+                    const schedHtml = sched.length > 0 ? sched.map(t => this._renderTaskRow(t)).join('') : '<p class="text-slate-400 text-sm text-center py-10">Nenhum cronograma gerado ainda. Aguarde a mentora.</p>';
+                    
+                    content = `
+                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex justify-between items-center">
+                            <div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Cronograma</h1><p class="text-slate-300 text-xs md:text-sm">Suas tarefas organizadas pela mentora.</p></div>
+                            <button onclick="window.App.readjustSchedule(event)" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 shadow-lg"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Reajustar Atrasos</button>
+                        </div>
+                        <div class="glass-panel p-4 md:p-6 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 space-y-3 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            ${schedHtml}
+                        </div>
+                    </div>`;
+                } else if (tab === 'flashcards') {
+                    const today = new Date().toISOString();
+                    const cards = u.flashcards || [];
+                    const dueCards = cards.filter(c => c.nextReviewDate <= today);
+                    const limit = u.dailyCardLimit || 10;
+                    const cardsToday = dueCards.slice(0, limit);
+
+                    let srsHtml = '';
+                    if (cardsToday.length === 0) {
+                        srsHtml = `
+                        <div class="text-center py-12">
+                            <div class="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/30"><i data-lucide="check-circle" class="w-10 h-10"></i></div>
+                            <h3 class="text-white font-bold text-xl mb-2">Tudo Feito!</h3>
+                            <p class="text-slate-400 text-sm">Você não tem cards para revisar hoje.</p>
+                        </div>`;
+                    } else {
+                        const card = cardsToday[0];
+                        srsHtml = `
+                        <div class="perspective-1000 w-full max-w-lg mx-auto h-[350px]">
+                            <div class="relative w-full h-full transform-style-3d ${this.state.isCardFlipped ? 'rotate-y-180' : ''}">
+                                <!-- Front -->
+                                <div class="absolute inset-0 backface-hidden bg-slate-800 border-2 border-violet-500/50 rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-[0_0_30px_rgba(139,92,246,0.2)] cursor-pointer" onclick="window.App.flipCard()">
+                                    <p class="text-slate-400 text-xs font-bold uppercase tracking-widest absolute top-6">Frente - Pergunta</p>
+                                    <p class="text-white text-lg md:text-xl font-medium whitespace-pre-wrap">${card.front}</p>
+                                    <p class="text-violet-400 text-xs mt-8 animate-pulse">Toque para ver a resposta</p>
+                                </div>
+                                <!-- Back -->
+                                <div class="absolute inset-0 backface-hidden rotate-y-180 bg-slate-800 border-2 border-emerald-500/50 rounded-3xl p-6 md:p-8 flex flex-col items-center justify-center text-center shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+                                    <p class="text-slate-400 text-xs font-bold uppercase tracking-widest absolute top-6">Verso - Resposta</p>
+                                    <div class="flex-1 flex items-center justify-center overflow-y-auto w-full custom-scrollbar py-8"><p class="text-white text-base md:text-lg font-medium whitespace-pre-wrap">${card.back}</p></div>
+                                    <div class="w-full grid grid-cols-3 gap-2 mt-4">
+                                        <button onclick="window.App.srsAnswer('${card.id}', 0)" class="bg-rose-500/20 text-rose-400 border border-rose-500/50 hover:bg-rose-500 hover:text-white py-2 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-colors">Errei</button>
+                                        <button onclick="window.App.srsAnswer('${card.id}', 1)" class="bg-amber-500/20 text-amber-400 border border-amber-500/50 hover:bg-amber-500 hover:text-white py-2 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-colors">Bom</button>
+                                        <button onclick="window.App.srsAnswer('${card.id}', 2)" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500 hover:text-white py-2 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-colors">Fácil</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-center text-slate-400 text-sm mt-6 font-bold">Restam: <span class="text-violet-400">${cardsToday.length}</span> cards hoje</p>`;
+                    }
+
+                    content = `
+                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex justify-between items-center">
+                            <div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Revisão Espaçada</h1><p class="text-slate-300 text-xs md:text-sm">Fixe o conteúdo usando SRS.</p></div>
+                            <div class="text-right"><span class="block text-2xl font-black text-cyan-400">${cards.length}</span><span class="text-[10px] text-slate-400 uppercase font-bold">Total na Base</span></div>
+                        </div>
+                        
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60">
+                            ${srsHtml}
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="glass-panel p-6 rounded-2xl border-white/10 shadow-lg bg-slate-900/60">
+                                <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="plus-circle" class="w-5 h-5 text-violet-400"></i> Criar Card Personalizado</h3>
+                                <form onsubmit="window.App.saveCustomFlashcard(event)" class="space-y-3">
+                                    <textarea id="fc-front" required placeholder="Frente (Pergunta)" class="w-full glass-input rounded-xl p-3 text-sm h-20 outline-none focus:border-violet-500 custom-scrollbar"></textarea>
+                                    <textarea id="fc-back" required placeholder="Verso (Resposta)" class="w-full glass-input rounded-xl p-3 text-sm h-24 outline-none focus:border-emerald-500 custom-scrollbar"></textarea>
+                                    <button type="submit" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3 rounded-xl text-sm transition-colors">Salvar Card</button>
+                                </form>
+                            </div>
+                            <div class="glass-panel p-6 rounded-2xl border-white/10 shadow-lg bg-slate-900/60">
+                                <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-slate-400"></i> Configuração Diária</h3>
+                                <form onsubmit="window.App.updateCardLimit(event)" class="space-y-3">
+                                    <div><label class="text-xs text-slate-400 font-bold uppercase mb-1 block">Meta de Cards por Dia</label><input type="number" id="fc-limit" value="${u.dailyCardLimit || 10}" min="1" max="100" class="w-full glass-input rounded-xl p-3 text-sm text-center font-bold" /></div>
+                                    <button type="submit" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl text-sm transition-colors">Salvar Limite</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>`;
+                } else if (tab === 'profile') {
+                    let schedHtml = daysMap.map(d => `
+                        <div class="flex flex-col items-center bg-black/40 p-2 rounded-lg md:rounded-xl border border-white/10 w-[28%] sm:w-[85px] md:w-[90px] shadow-inner flex-grow-0">
+                            <span class="text-[9px] md:text-[10px] font-bold text-slate-300 mb-1 md:mb-2 uppercase">${d.label}</span>
+                            <div class="flex items-center justify-between w-full px-1">
+                                <button type="button" onclick="window.App.updateSchedVal('${d.key}', -1)" class="w-5 h-5 md:w-6 md:h-6 rounded-full bg-white/10 text-white font-black hover:bg-rose-500 flex items-center justify-center">-</button>
+                                <span id="sch-${d.key}" class="font-black text-white text-xs md:text-sm">${this.state.schedule[d.key]||0}h</span>
+                                <button type="button" onclick="window.App.updateSchedVal('${d.key}', 1)" class="w-5 h-5 md:w-6 md:h-6 rounded-full bg-white/10 text-white font-black hover:bg-emerald-500 flex items-center justify-center">+</button>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    content = `
+                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60"><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Meu Perfil</h1><p class="text-slate-300 text-xs md:text-sm">Gerencie suas configurações de estudo.</p></div>
+                        
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60">
+                            <h2 class="text-lg md:text-xl font-bold text-white mb-4"><i data-lucide="clock" class="inline w-5 h-5 text-violet-400 mr-2"></i> Ajustar Horas Disponíveis</h2>
+                            <div class="p-4 bg-slate-950/50 rounded-2xl border border-white/5 mb-6">
+                                <div class="flex flex-wrap justify-center gap-2">${schedHtml}</div>
+                            </div>
+                            <button id="btn-save-prof" onclick="window.App.saveStudentProfile()" class="w-full md:w-auto px-8 py-3.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-bold text-sm md:text-base flex items-center justify-center gap-2 mx-auto"><i data-lucide="save" class="w-5 h-5"></i> Salvar Alterações</button>
+                        </div>
+                    </div>`;
+                }
+
+                return `
+                <div class="flex h-full w-full bg-transparent">
+                    ${sidebar}
+                    <main class="flex-1 flex flex-col h-[100dvh] relative">
+                        <header class="glass-panel border-b border-white/5 p-3 flex items-center justify-between z-40 md:hidden">
+                            <div class="flex items-center gap-3"><button onclick="window.App.toggleMenu()" class="text-slate-200"><i data-lucide="menu" class="w-5 h-5"></i></button><h2 class="text-base font-bold text-white">${navItems.find(i=>i.id===tab)?.label||'Painel'}</h2></div>
+                            <button onclick="window.App.logout()" class="text-rose-400 bg-rose-500/10 p-1.5 rounded-md border border-rose-500/20"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+                        </header>
+                        <div class="flex-1 overflow-y-auto p-4 md:p-8 z-10 custom-scrollbar"><div class="max-w-6xl mx-auto h-full">${content}</div></div>
+                    </main>
+                </div>`;
+            },
+
+            _renderTaskRow: function(t) {
+                const isCompleted = t.completed;
+                const isQuestions = t.type === 'questoes';
+                const color = t.type === 'teoria' ? 'violet' : t.type === 'revisao' ? 'amber' : 'emerald';
+                const bgClass = isCompleted ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-slate-800/80 border-slate-600';
+                const iconColor = isCompleted ? 'text-emerald-400' : `text-${color}-400`;
+                const opacity = isCompleted ? 'opacity-70' : 'opacity-100';
+
+                const isActiveTimer = this.state.activeTimerId === t.id;
+                const timerHtml = isActiveTimer ? `
+                    <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-cyan-500/50">
+                        <span class="text-cyan-400 font-mono font-bold text-sm tracking-wider" id="timer-display-${t.id}">${this.formatTimer(this.state.activeTimerSeconds)}</span>
+                        <button onclick="window.App.pauseTimer()" class="text-rose-400 hover:text-rose-300 p-1"><i data-lucide="pause-circle" class="w-4 h-4"></i></button>
+                    </div>
+                ` : (!isCompleted ? `
+                    <button onclick="window.App.startTimer('${t.id}', ${t.duration})" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold border border-white/10 transition-colors"><i data-lucide="play-circle" class="w-4 h-4"></i> Play Timer</button>
+                ` : '');
+
+                let questionsInputHtml = '';
+                if (isQuestions && this.state.activeTaskInputId === t.id && !isCompleted) {
+                    questionsInputHtml = `
+                    <div class="mt-3 bg-black/40 p-3 rounded-xl border border-white/10 animate-fade-in flex flex-col md:flex-row gap-2 items-center">
+                        <input type="number" id="q-tot-${t.id}" placeholder="Total Resolvidas" class="glass-input text-xs p-2 rounded w-full md:w-32 text-center" />
+                        <input type="number" id="q-cor-${t.id}" placeholder="Acertos" class="glass-input text-xs p-2 rounded w-full md:w-32 text-center" />
+                        <div class="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
+                            <button onclick="window.App.saveQuestionsTask('${t.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded flex-1 md:flex-none">Salvar</button>
+                            <button onclick="window.App.cancelQuestionsTask()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-2 rounded flex-1 md:flex-none">Cancelar</button>
+                        </div>
+                    </div>`;
+                }
+
+                return `
+                <div class="p-4 md:p-5 rounded-xl border ${bgClass} ${opacity} transition-all relative group shadow-md hover:shadow-lg hover:border-${color}-500/50 mb-3">
+                    <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                        <div class="flex items-start gap-3 w-full md:w-auto">
+                            <button onclick="window.App.toggleStudentTask('${t.id}')" class="mt-1 w-6 h-6 rounded-full border-2 ${isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500 hover:border-violet-400'} flex items-center justify-center flex-shrink-0 transition-colors">
+                                ${isCompleted ? '<i data-lucide="check" class="text-white w-4 h-4"></i>' : ''}
+                            </button>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-${color}-400 bg-${color}-500/10 px-2 py-0.5 rounded border border-${color}-500/20">${this.formatDateBR(t.date)}</span>
+                                    <span class="text-[10px] md:text-xs text-slate-400 font-bold">${t.duration} min</span>
+                                    ${isQuestions && isCompleted ? `<span class="text-[10px] md:text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">${t.qCorrect}/${t.qTotal} Acertos</span>` : ''}
+                                </div>
+                                <p class="text-white text-sm md:text-base font-bold leading-snug ${isCompleted ? 'line-through text-slate-400' : ''}">${t.topic}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end w-full md:w-auto gap-3">
+                            ${timerHtml}
+                        </div>
+                    </div>
+                    ${questionsInputHtml}
+                </div>`;
+            }
+        };
+
+        window.onload = () => { window.App.init(); };
+
+    </script>
+</body>
+</html>
