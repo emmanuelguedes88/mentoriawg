@@ -49,6 +49,13 @@
         
         .mindmap-line-v { position: absolute; width: 2px; background: linear-gradient(to bottom, var(--glow-color), transparent); left: 50%; transform: translateX(-50%); z-index: 1; }
         .mindmap-line-h { position: absolute; height: 2px; background: linear-gradient(to right, transparent, var(--glow-color), transparent); top: 32px; z-index: 1; }
+
+        .radio-card:checked + div {
+            border-color: rgba(139, 92, 246, 0.8);
+            background-color: rgba(139, 92, 246, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -123,8 +130,12 @@
                 // MENTORA: Controle do Editor de Cronograma
                 editalForms: [{ id: Date.now(), name: '', content: '' }],
                 parsedBlocks: null,
+
+                // CONFIGURAÇÕES DE CRONOGRAMA FLEXIVEL/INTENSIVO
+                scheduleMode: 'flex',
+                scheduleStartDate: new Date().toISOString().split('T')[0],
+                scheduleEndDate: (() => { let d = new Date(); d.setDate(d.getDate()+30); return d.toISOString().split('T')[0]; })(),
                 
-                // CONTROLE DE SEGURANÇA PARA DELETAR SEM BUG
                 confirmDeleteId: null,
                 
                 isCardFlipped: false,
@@ -330,9 +341,6 @@
                 this.render();
             },
 
-            // =========================================================================
-            // LOGIN E CADASTRO: CÓDIGO 100% ORIGINAL RESTAURADO E BLINDADO
-            // =========================================================================
             loginStudent: async function(e) {
                 e.preventDefault();
                 const em = document.getElementById('log-em').value.trim();
@@ -453,7 +461,6 @@
                     }
                 }
             },
-            // =========================================================================
 
             updateSchedVal: function(day, delta) {
                 let cur = this.state.schedule[day] || 0;
@@ -542,18 +549,16 @@
                 setTimeout(() => { const el = document.getElementById('chat-end'); if(el) el.scrollIntoView(); }, 100);
             },
 
-            toggleMindMapNode: function(nodeId) {
-                if (this.state.expandedMindMapId === nodeId) {
-                    this.state.expandedMindMapId = null;
-                } else {
-                    this.state.expandedMindMapId = nodeId;
-                }
+            // =========================================================================
+            // MOTOR DE AGRUPAMENTO (MÁXIMO 3 SUBTÓPICOS + 1H ESTRITA)
+            // =========================================================================
+            setScheduleMode: function(mode) {
+                this.state.scheduleMode = mode;
                 this.render();
             },
-
-            // =========================================================================
-            // MENTORA: MOTOR DE AGRUPAMENTO (REGRA HIERÁRQUICA ESTRITA INQUEBRÁVEL)
-            // =========================================================================
+            setScheduleDate: function(field, val) {
+                this.state[field] = val;
+            },
             addEditalForm: function() {
                 this.state.editalForms.push({ id: Date.now(), name: '', content: '' });
                 this.render();
@@ -567,52 +572,59 @@
                 this.render();
             },
 
+            parseDisciplineContent: function(subjectName, text, applySubtopicLimit) {
+                const words = text.split(/\s+/);
+                const blocks = [];
+                let currentBlock = [];
+                let currentMainTopicStr = "";
+                let subtopicCount = 0;
+
+                const isMainTopic = (w) => /^(\d+)[.)\-]?$/.test(w);
+                const isSubtopic = (w) => /^(\d+\.\d+(\.\d+)*)[.)\-]?$/.test(w);
+
+                for (let w of words) {
+                    if (!w) continue;
+
+                    if (isMainTopic(w)) {
+                        if (currentBlock.length > 0) {
+                            blocks.push({ id: 'b_'+Date.now()+'_'+Math.random().toString(36).substr(2), discipline: subjectName, content: currentBlock.join(' ') });
+                        }
+                        currentMainTopicStr = w;
+                        subtopicCount = 0;
+                        currentBlock = [w];
+                    } else if (isSubtopic(w) && applySubtopicLimit) {
+                        if (subtopicCount >= 3) {
+                            blocks.push({ id: 'b_'+Date.now()+'_'+Math.random().toString(36).substr(2), discipline: subjectName, content: currentBlock.join(' ') });
+                            currentBlock = [`${currentMainTopicStr} (Cont.)`, w];
+                            subtopicCount = 1;
+                        } else {
+                            subtopicCount++;
+                            currentBlock.push(w);
+                        }
+                    } else {
+                        currentBlock.push(w);
+                    }
+                }
+                if (currentBlock.length > 0) {
+                    blocks.push({ id: 'b_'+Date.now()+'_'+Math.random().toString(36).substr(2), discipline: subjectName, content: currentBlock.join(' ') });
+                }
+                return blocks;
+            },
+
             processEditalForms: function() {
-                let blocks = [];
-                
+                let allBlocks = [];
+                const isIntensive = this.state.scheduleMode === 'intensive';
+
                 this.state.editalForms.forEach(form => {
                     if (!form.name.trim() || !form.content.trim()) return;
-
-                    let disciplineName = form.name.trim().toUpperCase();
-                    let lines = form.content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                    
-                    let currentRoot = null;
-                    let currentContent = [];
-
-                    const pushBlock = () => {
-                        if (currentContent.length > 0) {
-                            blocks.push({
-                                id: 'b_' + Date.now() + Math.random().toString(36).substr(2, 9),
-                                discipline: disciplineName,
-                                content: currentContent.join(' ') // Agrupa TUDO em um bloco de texto sem quebras de linha
-                            });
-                            currentContent = [];
-                        }
-                    };
-
-                    lines.forEach(line => {
-                        // Captura apenas a raiz principal, ignorando os subníveis
-                        // Ex: "4.2.10 Processo..." vai extrair apenas o "4".
-                        let match = line.match(/^ *(\d+)/);
-                        if (match) {
-                            let rootNum = match[1];
-                            if (currentRoot === null) {
-                                currentRoot = rootNum;
-                            } else if (currentRoot !== rootNum) {
-                                pushBlock(); // Se mudou da raiz "4" para a raiz "5", salva o bloco anterior.
-                                currentRoot = rootNum;
-                            }
-                            currentContent.push(line);
-                        } else {
-                            currentContent.push(line); // Se não começar com número, é continuação do bloco atual.
-                        }
-                    });
-                    pushBlock(); // Salva o último
+                    const subject = form.name.trim().toUpperCase();
+                    const parsed = this.parseDisciplineContent(subject, form.content, !isIntensive);
+                    allBlocks = allBlocks.concat(parsed);
                 });
 
-                if (blocks.length === 0) return this.notify("Preencha pelo menos uma disciplina e tópicos válidos.", true);
+                if (allBlocks.length === 0) return this.notify("Preencha pelo menos uma disciplina.", true);
 
-                this.state.parsedBlocks = blocks;
+                this.state.parsedBlocks = allBlocks;
                 this.render();
             },
 
@@ -633,26 +645,18 @@
                 if(block) block[field] = value;
             },
 
-            // =========================================================================
-            // MENTORA: DELETAR CRONOGRAMA NATIVO (CORRIGIDO PARA NÃO TRAVAR)
-            // =========================================================================
             deleteStudentSchedule: async function(studentId) {
                 if (this.state.confirmDeleteId === studentId) {
                     try {
                         await updateDoc(doc(db, 'users', studentId), {
-                            generatedSchedule: [],
-                            flashcards: [],
-                            rawEdital: ''
+                            generatedSchedule: [], flashcards: [], rawEdital: ''
                         });
                         this.state.parsedBlocks = null;
                         this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
                         this.state.confirmDeleteId = null;
-                        this.notify('Cronograma do aluno foi apagado permanentemente.');
+                        this.notify('Cronograma do aluno foi apagado.');
                         this.render();
-                    } catch(e) {
-                        console.error(e);
-                        this.notify('Erro ao excluir no Firebase. Verifique console.', true);
-                    }
+                    } catch(e) { this.notify('Erro ao excluir no Firebase.', true); }
                 } else {
                     this.state.confirmDeleteId = studentId;
                     this.render();
@@ -666,31 +670,39 @@
             },
 
             // =========================================================================
-            // GERADOR FINAL DO CRONOGRAMA: EXCLUSIVIDADE 1H E SPACED REPETITION
+            // GERADOR DE CRONOGRAMA: MODO FLEXÍVEL E INTENSIVO
             // =========================================================================
             finalizeSchedule: async function(studentId) {
                 const stu = this.state.students.find(s=>s.id===studentId);
                 const blocks = this.state.parsedBlocks;
 
                 if(!blocks || blocks.length === 0) return this.notify('Não há blocos para gerar.', true);
+                if(!stu.schedule) return this.notify('O aluno precisa ter horas cadastradas no perfil.', true);
 
-                this.notify('Processando e gerando cronograma de longo prazo...', false);
+                const isIntensive = this.state.scheduleMode === 'intensive';
+                const startDate = new Date(this.state.scheduleStartDate + 'T00:00:00');
+                
+                let result = { draft: [], fcards: [] };
 
-                let flatTopics = blocks.map(b => {
-                    return { subject: b.discipline, content: b.content };
-                });
+                if (isIntensive) {
+                    const endDate = new Date(this.state.scheduleEndDate + 'T23:59:59');
+                    if (endDate < startDate) return this.notify("A data do fim deve ser maior que o início.", true);
+                    result = this.generateIntensiveSchedule(blocks, stu.schedule, startDate, endDate);
+                } else {
+                    result = this.generateFlexibleSchedule(blocks, stu.schedule, startDate);
+                }
 
-                const result = this._generateLogic(flatTopics, stu.schedule, new Date());
+                if(!result || result.draft.length === 0) return;
 
                 try {
                     await updateDoc(doc(db, 'users', studentId), {
                         generatedSchedule: result.draft,
-                        flashcards: [...(stu.flashcards || []), ...result.fcards],
-                        rawEdital: "Cronograma Estruturado e Inteligente Gerado."
+                        flashcards: [...(stu.flashcards || []), ...(result.fcards || [])],
+                        rawEdital: "Cronograma Estruturado Gerado."
                     });
                     this.state.parsedBlocks = null;
                     this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
-                    this.notify("Cronograma Perfeito criado com sucesso!");
+                    this.notify("Cronograma criado e enviado ao aluno com sucesso!");
                     this.render();
                 } catch(e) {
                     console.error(e);
@@ -698,126 +710,159 @@
                 }
             },
 
-            _generateLogic: function(flatTopics, scheduleConfig, baseDate) {
+            // MODO FLEXÍVEL (Com Spaced Repetition Infinita)
+            generateFlexibleSchedule: function(rawBlocks, scheduleConfig, baseDate) {
                 let draft = [];
                 let fcards = [];
-                let pendingTasks = [];
-
-                flatTopics.forEach((item, idx) => {
-                    pendingTasks.push({ 
-                        id: 'base_' + idx, 
-                        subject: item.subject, 
-                        content: item.content, 
-                        type: 'teoria', 
-                        minDate: new Date(baseDate),
-                        step: 0 
-                    });
+                let scheduledTasks = []; 
+                
+                let unstudied = {};
+                rawBlocks.forEach(b => {
+                    if (!unstudied[b.discipline]) unstudied[b.discipline] = [];
+                    unstudied[b.discipline].push(b);
                 });
+                
+                let subjectNames = Object.keys(unstudied);
+                let currentSubjectIdx = 0;
 
-                let currDate = new Date(baseDate);
-                currDate.setHours(0,0,0,0);
-                const daysKeys = ['dom','seg','ter','qua','qui','sex','sab'];
-                let globalId = 0;
-                let sanityCheck = 0;
-
-                const advanceToValidDay = (d) => {
-                    let dCopy = new Date(d);
-                    let count = 0;
-                    while((scheduleConfig[daysKeys[dCopy.getDay()]] || 0) === 0 && count < 14) {
-                        dCopy.setDate(dCopy.getDate() + 1); count++;
+                function getNextUnstudiedTopic() {
+                    let attempts = 0;
+                    while (attempts < subjectNames.length) {
+                        const subj = subjectNames[currentSubjectIdx];
+                        currentSubjectIdx = (currentSubjectIdx + 1) % subjectNames.length;
+                        if (unstudied[subj] && unstudied[subj].length > 0) return unstudied[subj].shift();
+                        attempts++;
                     }
-                    return dCopy;
-                };
+                    return null;
+                }
 
-                currDate = advanceToValidDay(currDate);
+                let currentDayCount = 1;
+                const daysKeys = ['dom','seg','ter','qua','qui','sex','sab'];
+                let tIdCounter = 0;
 
-                while(pendingTasks.length > 0 && sanityCheck < 5000) {
-                    sanityCheck++;
-                    let dayKey = daysKeys[currDate.getDay()];
-                    let totalHoursAvailable = Math.floor(scheduleConfig[dayKey] || 0); 
+                while ((Object.values(unstudied).some(arr => arr.length > 0) || scheduledTasks.some(t => !t.done)) && currentDayCount <= 730) {
                     
-                    if (totalHoursAvailable > 0) {
-                        let subjectsStudiedToday = new Set();
-                        let slotsUsed = 0;
+                    let currentDate = new Date(baseDate);
+                    currentDate.setDate(currentDate.getDate() + (currentDayCount - 1));
+                    const dayOfWeekIdx = currentDate.getDay();
+                    const hoursToday = scheduleConfig[daysKeys[dayOfWeekIdx]] || 0;
 
-                        let dueTasks = pendingTasks.filter(t => t.minDate <= currDate);
+                    for (let h = 0; h < hoursToday; h++) {
+                        let pending = scheduledTasks.filter(t => t.dayDue <= currentDayCount && !t.done);
+                        pending.sort((a, b) => a.priority - b.priority || a.dayDue - b.dayDue);
 
-                        // Garante EXATAMENTE X Blocos para X Horas de estudo no dia
-                        while (slotsUsed < totalHoursAvailable && dueTasks.length > 0) {
-                            
-                            dueTasks.sort((a, b) => {
-                                if (a.step !== b.step) return b.step - a.step; 
-                                let aSubj = subjectsStudiedToday.has(a.subject) ? 1 : 0;
-                                let bSubj = subjectsStudiedToday.has(b.subject) ? 1 : 0;
-                                return aSubj - bSubj; 
+                        let offset = currentDate.getTimezoneOffset() * 60000;
+                        let dateStr = (new Date(currentDate.getTime() - offset)).toISOString().split('T')[0];
+
+                        if (pending.length > 0 && pending[0].priority <= 1) { 
+                            let task = pending[0];
+                            task.done = true;
+                            draft.push({
+                                id: 'tsk_' + Date.now() + '_' + (tIdCounter++),
+                                topic: `${task.topic.discipline}: ${task.topic.content}`,
+                                subject: task.topic.discipline, type: 'questoes', duration: 60, date: dateStr, completed: false, qTotal: 0, qCorrect: 0
                             });
-
-                            let selectedTask = dueTasks.shift();
-                            let actualIdx = pendingTasks.indexOf(selectedTask);
-                            if(actualIdx > -1) pendingTasks.splice(actualIdx, 1);
-
-                            const tId = Date.now() + '_' + globalId++;
-                            const offset = currDate.getTimezoneOffset() * 60000;
-                            const dateStr = (new Date(currDate.getTime() - offset)).toISOString().split('T')[0];
-                            
-                            // FORMATAÇÃO ESTRITA: Regra de Exclusividade do Bloco
-                            let typeLabel = '';
-                            if (selectedTask.type === 'teoria') typeLabel = '(1h de teoria)';
-                            else if (selectedTask.type === 'revisao') typeLabel = '(1h de revisão)';
-                            else if (selectedTask.type === 'questoes') typeLabel = '(1h de questões)';
-
-                            // Output exato: [NOME DA DISCIPLINA]: [Número do Tópico] ... ([1h de atividade])
-                            let formattedTopic = `${selectedTask.subject}: ${selectedTask.content} ${typeLabel}`;
-
-                            let taskObj = {
-                                id: 'tsk_' + tId, 
-                                topic: formattedTopic, 
-                                subject: selectedTask.subject,
-                                type: selectedTask.type, 
-                                duration: 60, // 1 HORA INQUEBRÁVEL
-                                date: dateStr, 
-                                completed: false
-                            };
-
-                            if (selectedTask.type === 'questoes') {
-                                taskObj.qTotal = 0; taskObj.qCorrect = 0;
-                            }
-
-                            draft.push(taskObj);
-                            subjectsStudiedToday.add(selectedTask.subject);
-                            slotsUsed++;
-
-                            // SPACED REPETITION OBRIGATÓRIA (D+1, D+7, D+15, D+30)
-                            if (selectedTask.type === 'teoria') {
-                                let d1 = new Date(currDate); d1.setDate(d1.getDate() + 1);
-                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'revisao', minDate: d1, step: 1 });
+                        } else {
+                            let newTopic = getNextUnstudiedTopic();
+                            if (newTopic) {
+                                let tId = Date.now() + '_' + (tIdCounter++);
+                                draft.push({
+                                    id: 'tsk_' + tId,
+                                    topic: `${newTopic.discipline}: ${newTopic.content}`,
+                                    subject: newTopic.discipline, type: 'teoria', duration: 60, date: dateStr, completed: false
+                                });
+                                
+                                scheduledTasks.push({ dayDue: currentDayCount + 1, topic: newTopic, priority: 1, done: false }); 
+                                scheduledTasks.push({ dayDue: currentDayCount + 7, topic: newTopic, priority: 3, done: false, isRev: true });
+                                scheduledTasks.push({ dayDue: currentDayCount + 15, topic: newTopic, priority: 3, done: false, isRev: true });
+                                scheduledTasks.push({ dayDue: currentDayCount + 30, topic: newTopic, priority: 3, done: false, isRev: true });
 
                                 fcards.push({
                                     id: 'fc_'+tId, 
-                                    front: `[${selectedTask.subject}] Qual a ideia central da Teoria abordada em:\n${selectedTask.content.substring(0, 45)}...?`, 
-                                    back: `Tente explicar os conceitos básicos e características da disciplina de ${selectedTask.subject}.`,
+                                    front: `📚 [${newTopic.discipline}]\n\nComo examinador de banca de concurso, exijo que você domine este tema:\n"${newTopic.content.substring(0, 80)}..."\n\nQual é a regra geral fundamental deste tópico e quais são as suas principais exceções?`, 
+                                    back: `💡 Gabarito do Especialista:\n\nPara gabaritar este tópico, você não pode esquecer a regra matriz e os casos de exceção. As bancas adoram usar palavras restritivas (como 'salvo', 'exceto', 'somente') nas exceções deste exato assunto. Revise os prazos, as competências e as palavras-chave que diferenciam a regra da exceção!`,
                                     nextReviewDate: dateStr, interval: 1, easeFactor: 2.5
                                 });
-                            } 
-                            else if (selectedTask.type === 'revisao' && selectedTask.step === 1) {
-                                let d7 = new Date(currDate); d7.setDate(d7.getDate() + 6);
-                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'questoes', minDate: d7, step: 2 });
-                            }
-                            else if (selectedTask.type === 'questoes' && selectedTask.step === 2) {
-                                let d15 = new Date(currDate); d15.setDate(d15.getDate() + 8);
-                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'revisao', minDate: d15, step: 3 });
-                            }
-                            else if (selectedTask.type === 'revisao' && selectedTask.step === 3) {
-                                let d30 = new Date(currDate); d30.setDate(d30.getDate() + 15);
-                                pendingTasks.push({ subject: selectedTask.subject, content: selectedTask.content, type: 'questoes', minDate: d30, step: 4 });
+                            } else if (pending.length > 0) { 
+                                let task = pending[0];
+                                task.done = true;
+                                draft.push({
+                                    id: 'tsk_' + Date.now() + '_' + (tIdCounter++),
+                                    topic: `${task.topic.discipline}: ${task.topic.content}`,
+                                    subject: task.topic.discipline, type: 'revisao', duration: 60, date: dateStr, completed: false
+                                });
+                            } else {
+                                break; 
                             }
                         }
                     }
-                    currDate.setDate(currDate.getDate() + 1);
-                    currDate = advanceToValidDay(currDate);
+                    currentDayCount++;
+                }
+                return { draft, fcards };
+            },
+
+            // MODO INTENSIVO (Data da Prova)
+            generateIntensiveSchedule: function(rawBlocks, scheduleConfig, startDate, endDate) {
+                let availableSlots = [];
+                let currentDate = new Date(startDate);
+                const daysKeys = ['dom','seg','ter','qua','qui','sex','sab'];
+
+                while (currentDate <= endDate) {
+                    const dayOfWeek = currentDate.getDay();
+                    const hours = scheduleConfig[daysKeys[dayOfWeek]] || 0;
+                    if (hours > 0) {
+                        let offset = currentDate.getTimezoneOffset() * 60000;
+                        let dateStr = (new Date(currentDate.getTime() - offset)).toISOString().split('T')[0];
+                        for (let h = 0; h < hours; h++) availableSlots.push(dateStr);
+                    }
+                    currentDate.setDate(currentDate.getDate() + 1);
                 }
 
-                return { draft, fcards };
+                const H = availableSlots.length;
+                if (H === 0) { this.notify("Você não tem horas nesse período!", true); return null; }
+
+                let finalTasks = [];
+                if (rawBlocks.length > H) {
+                    // Esmaga os blocos para caber nas horas
+                    const chunkSize = Math.ceil(rawBlocks.length / H);
+                    for (let i = 0; i < H; i++) {
+                        let mergedContent = [];
+                        let subjectStr = "";
+                        for (let j = 0; j < chunkSize; j++) {
+                            if (rawBlocks.length > 0) {
+                                let b = rawBlocks.shift();
+                                subjectStr = b.discipline; 
+                                mergedContent.push(b.content);
+                            }
+                        }
+                        if (mergedContent.length > 0) {
+                            finalTasks.push({ subject: subjectStr, content: mergedContent.join(' | '), type: 'teoria' });
+                        }
+                    }
+                } else {
+                    // Espalha blocos: Teoria, Questões e Revisão girando
+                    let blockPhases = rawBlocks.map(b => ({ ...b, phase: 0 }));
+                    for (let i = 0; i < H; i++) {
+                        let block = blockPhases[i % blockPhases.length];
+                        let t = block.phase === 0 ? 'teoria' : block.phase === 1 ? 'questoes' : 'revisao';
+                        finalTasks.push({ subject: block.discipline, content: block.content, type: t });
+                        block.phase++;
+                    }
+                }
+
+                let draft = [];
+                for (let i = 0; i < H; i++) {
+                    let task = finalTasks[i];
+                    if(!task) break;
+                    let taskObj = {
+                        id: 'tsk_int_' + Date.now() + '_' + i,
+                        topic: `${task.subject}: ${task.content}`,
+                        subject: task.subject, type: task.type, duration: 60, date: availableSlots[i], completed: false
+                    };
+                    if (task.type === 'questoes') { taskObj.qTotal = 0; taskObj.qCorrect = 0; }
+                    draft.push(taskObj);
+                }
+                return { draft, fcards: [] };
             },
 
             readjustSchedule: async function(e) {
@@ -1070,7 +1115,7 @@
                         ${logo ? `<img src="${logo}" class="w-full h-full object-cover"/>` : `<i data-lucide="brain-circuit" class="text-white w-12 h-12 md:w-16 md:h-16"></i>`}
                     </div>
                     <div class="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <i data-lucide="camera" class="text-white w-5 h-5 md:w-6 md:h-6 mb-1"></i><span class="text-[8px] md:text-[10px] text-white font-bold uppercase tracking-wider">Alterar Logo</span>
+                        <i data-lucide="camera" class="text-white w-5 h-5 md:w-6 md:h-6 mb-1"></i><span class="text-[8px] md:text-[10px] text-white font-bold uppercase tracking-wider">Alterar</span>
                     </div>
                 </div>`;
             },
@@ -1293,12 +1338,13 @@
                         <div class="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mt-4 bg-black/20 p-2 rounded-xl border border-white/5">
                             ${stu.generatedSchedule.map(t => {
                                 const color = t.type==='teoria' ? 'violet' : t.type==='revisao' ? 'amber' : 'emerald';
+                                const cleanTopic = (t.topic || '').replace(/\(1h de.*?\)/gi, '').trim();
                                 return `
                                 <div class="bg-black/40 p-3 rounded-xl border border-white/5 flex gap-3">
                                     <div class="bg-${color}-500/20 p-2 rounded-lg h-fit border border-${color}-500/30"><i data-lucide="book-open" class="text-${color}-400 w-4 h-4"></i></div>
                                     <div>
                                         <span class="text-[10px] text-${color}-400 font-bold uppercase tracking-wider">${this.formatDateBR(t.date)}</span>
-                                        <p class="text-white text-xs md:text-sm font-medium mt-1 leading-relaxed">${t.topic}</p>
+                                        <p class="text-white text-xs md:text-sm font-medium mt-1 leading-relaxed">${cleanTopic}</p>
                                     </div>
                                 </div>`;
                             }).join('')}
@@ -1314,8 +1360,8 @@
                         <div class="bg-slate-900/80 border border-violet-500/30 p-4 md:p-6 rounded-xl md:rounded-2xl animate-fade-in shadow-[0_0_30px_rgba(139,92,246,0.1)]">
                             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/10 pb-4">
                                 <div>
-                                    <h4 class="text-white font-bold text-lg">Revisão Final dos Blocos Inquebráveis</h4>
-                                    <p class="text-slate-400 text-xs mt-1"><strong>A Regra de Ouro foi aplicada:</strong> O Motor de Inteligência agrupou a hierarquia. Cada card gerará exatos Blocos de 1 Hora Exclusivos (Teoria -> Rev -> Questões).</p>
+                                    <h4 class="text-white font-bold text-lg">Revisão Final dos Blocos</h4>
+                                    <p class="text-slate-400 text-xs mt-1">Aqui estão os tópicos divididos. Você pode editá-los antes de gerar as datas.</p>
                                 </div>
                                 <button onclick="window.App.addNewBlock()" class="bg-violet-600 hover:bg-violet-500 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white transition-colors shadow-lg flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4"></i> Inserir Bloco Adicional</button>
                             </div>
@@ -1341,24 +1387,67 @@
                     } else {
                         draftHtml = activeScheduleHtml + `
                         <div class="bg-slate-900/60 p-4 md:p-6 rounded-2xl border border-white/5 shadow-lg">
+                            
+                            <!-- SELEÇÃO DE META (Flexível vs Intensivo) -->
+                            <div class="mb-8 border-b border-white/10 pb-6">
+                                <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="target" class="text-violet-400 w-5 h-5"></i> Definir Estratégia</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                                    <label class="block cursor-pointer relative">
+                                        <input type="radio" name="study-mode" value="flex" class="peer sr-only radio-card" ${this.state.scheduleMode === 'flex' ? 'checked' : ''} onchange="window.App.setScheduleMode('flex')">
+                                        <div class="p-4 rounded-xl border border-white/10 bg-black/40 transition-all hover:bg-white/5">
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-2xl">🐢</span>
+                                                <div>
+                                                    <h3 class="font-bold text-white text-sm md:text-base">No próprio ritmo (Flexível)</h3>
+                                                    <p class="text-[10px] md:text-xs text-slate-400 mt-1 font-medium">Divide os tópicos (máx 3 sub) e agenda revisões automáticas (Repetição Espaçada).</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </label>
+
+                                    <label class="block cursor-pointer relative">
+                                        <input type="radio" name="study-mode" value="intensive" class="peer sr-only radio-card" ${this.state.scheduleMode === 'intensive' ? 'checked' : ''} onchange="window.App.setScheduleMode('intensive')">
+                                        <div class="p-4 rounded-xl border border-white/10 bg-black/40 transition-all hover:bg-white/5">
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-2xl">🚀</span>
+                                                <div>
+                                                    <h3 class="font-bold text-white text-sm md:text-base">Modo Intensivo (Pós-Edital)</h3>
+                                                    <p class="text-[10px] md:text-xs text-slate-400 mt-1 font-medium">Comprime os tópicos para caber nas horas disponíveis até a data da prova.</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Início dos Estudos</label>
+                                        <input type="date" value="${this.state.scheduleStartDate}" onchange="window.App.setScheduleDate('scheduleStartDate', this.value)" class="w-full glass-input rounded-xl py-2 px-3 text-sm font-bold text-slate-200" required>
+                                    </div>
+                                    <div class="transition-opacity ${this.state.scheduleMode === 'intensive' ? 'opacity-100' : 'opacity-30 pointer-events-none'}">
+                                        <label class="text-[10px] md:text-xs text-rose-400 font-bold uppercase block mb-1">Data da Prova (Fim)</label>
+                                        <input type="date" value="${this.state.scheduleEndDate}" onchange="window.App.setScheduleDate('scheduleEndDate', this.value)" class="w-full glass-input rounded-xl py-2 px-3 text-sm font-bold text-rose-300" ${this.state.scheduleMode === 'intensive' ? 'required' : ''}>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-white font-bold text-lg">Cadastro Hierárquico por Disciplina</h3>
+                                <h3 class="text-white font-bold text-lg">Conteúdo Programático</h3>
                                 <button onclick="window.App.addEditalForm()" class="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-colors">+ Adicionar Disciplina</button>
                             </div>
-                            <p class="text-slate-400 text-xs md:text-sm mb-6 leading-relaxed">A inteligência unificará os assuntos hierárquicos (ex: o pai 1 e seus filhos 1.1, 1.2) automaticamente em <strong>blocos inquebráveis de 1 Hora</strong>.</p>
+                            <p class="text-slate-400 text-xs md:text-sm mb-6 leading-relaxed">Adicione as disciplinas e cole o edital com a numeração (ex: 1 Assunto. 1.1 Detalhe).</p>
                             
                             <div class="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2 mb-6" id="edital-forms-list">
                                 ${this.state.editalForms.map((f, idx) => `
-                                    <div class="bg-black/40 border border-white/10 rounded-xl p-4 relative group">
+                                    <div class="bg-black/40 border border-white/10 rounded-xl p-4 relative group animate-fade-in">
                                         ${this.state.editalForms.length > 1 ? `<button type="button" onclick="window.App.removeEditalForm(${f.id})" class="absolute top-4 right-4 text-rose-500 hover:bg-rose-500/20 p-1.5 rounded-md transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
-                                        <input type="text" class="w-full md:w-3/4 bg-transparent border-b border-slate-600 focus:border-cyan-400 text-cyan-300 font-bold uppercase text-sm md:text-base py-1 outline-none mb-3 transition-colors placeholder-slate-600" placeholder="NOME DA DISCIPLINA (Ex: DIREITO CONSTITUCIONAL)" value="${f.name}" onchange="window.App.updateEditalForm(${f.id}, 'name', this.value)"/>
-                                        <textarea class="w-full glass-input rounded-xl p-3 text-sm h-32 custom-scrollbar leading-relaxed outline-none focus:border-violet-500 transition-colors placeholder-slate-500" placeholder="Cole os assuntos com numeração...\nEx:\n5 Domínio da estrutura morfossintática do período.\n5.1 Emprego das classes de palavras.\n5.2 Relações de coordenação..." onchange="window.App.updateEditalForm(${f.id}, 'content', this.value)">${f.content}</textarea>
+                                        <input type="text" class="w-full md:w-3/4 bg-transparent border-b border-slate-600 focus:border-cyan-400 text-cyan-300 font-bold uppercase text-sm md:text-base py-1 outline-none mb-3 transition-colors placeholder-slate-600" placeholder="DISCIPLINA (Ex: CONSTITUCIONAL)" value="${f.name}" onchange="window.App.updateEditalForm(${f.id}, 'name', this.value)"/>
+                                        <textarea class="w-full glass-input rounded-xl p-3 text-sm h-32 custom-scrollbar leading-relaxed outline-none focus:border-violet-500 transition-colors placeholder-slate-500" placeholder="1 Direitos Básicos.\n1.1 Vida.\n1.2 Liberdade.\n1.3 Igualdade.\n1.4 Segurança..." onchange="window.App.updateEditalForm(${f.id}, 'content', this.value)">${f.content}</textarea>
                                     </div>
                                 `).join('')}
                             </div>
 
                             <div class="flex gap-2">
-                                <button onclick="window.App.processEditalForms()" class="flex-1 py-4 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold text-sm md:text-base transition-colors shadow-[0_0_15px_rgba(139,92,246,0.4)] flex justify-center items-center gap-2"><i data-lucide="sparkles" class="w-5 h-5"></i> Processar Inteligência e Simular Blocos</button>
+                                <button onclick="window.App.processEditalForms()" class="flex-1 py-4 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold text-sm md:text-base transition-colors shadow-[0_0_15px_rgba(139,92,246,0.4)] flex justify-center items-center gap-2"><i data-lucide="sparkles" class="w-5 h-5"></i> Gerar Cronograma</button>
                             </div>
                         </div>
                         `;
@@ -1415,7 +1504,7 @@
 
                         <!-- INTELIGÊNCIA DE CRONOGRAMA -->
                         <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-3xl border-white/10 shadow-xl bg-slate-900/80 mt-6 md:mt-8">
-                            <h3 class="text-lg md:text-2xl font-bold text-white mb-3 md:mb-4 flex items-center gap-2"><i data-lucide="brain-circuit" class="text-violet-400"></i> Motor de Cronograma (Neuro-SRS)</h3>
+                            <h3 class="text-lg md:text-2xl font-bold text-white mb-3 md:mb-4 flex items-center gap-2"><i data-lucide="brain-circuit" class="text-violet-400"></i> Gestor de Cronograma</h3>
                             ${draftHtml}
                         </div>
 
@@ -1470,7 +1559,7 @@
                                 <h3 class="text-lg md:text-xl font-extrabold text-white mb-1">${s.name}</h3>
                                 <p class="text-[10px] md:text-xs text-cyan-400 font-bold bg-cyan-900/30 px-2 py-1 rounded border border-cyan-500/20 inline-block mb-2 md:mb-3">${s.targetExam}</p>
                                 <div class="grid grid-cols-2 gap-2 text-xs md:text-sm">
-                                    <div class="bg-slate-950/60 p-1.5 md:p-2 rounded-lg md:rounded-xl text-center"><p class="text-slate-400 text-[8px] md:text-[10px] uppercase font-bold">Retenção</p><p class="font-black text-emerald-400">${s.retention||0}%</p></div>
+                                    <div class="bg-slate-950/60 p-1.5 md:p-2 rounded-lg md:rounded-xl text-center"><p class="text-slate-400 text-[8px] md:text-[10px] uppercase font-bold">Ofensiva</p><p class="font-black text-emerald-400">${s.streak||0}</p></div>
                                     <div class="bg-slate-950/60 p-1.5 md:p-2 rounded-lg md:rounded-xl text-center"><p class="text-slate-400 text-[8px] md:text-[10px] uppercase font-bold">Horas</p><p class="font-black text-white">${s.hours||0}h</p></div>
                                 </div>
                             </div>
@@ -1592,7 +1681,6 @@
                     }
                     const globalPct = globalTotal > 0 ? Math.round((globalAcertos/globalTotal)*100) : 0;
 
-                    // MENSAGENS DO CHAT DA MENTORA PARA O ALUNO
                     const chatMsgs = (u.mentorMessages || []).map(msg => `
                         <div class="flex ${msg.role==='student'?'justify-end':'justify-start'}">
                             <div class="flex flex-col gap-1 max-w-[90%] md:max-w-[70%]">
@@ -1774,18 +1862,33 @@
                 const isQuestions = t.type === 'questoes';
                 const color = t.type === 'teoria' ? 'violet' : t.type === 'revisao' ? 'amber' : 'emerald';
                 const bgClass = isCompleted ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-slate-800/80 border-slate-600';
-                const iconColor = isCompleted ? 'text-emerald-400' : `text-${color}-400`;
                 const opacity = isCompleted ? 'opacity-70' : 'opacity-100';
 
-                const isActiveTimer = this.state.activeTimerId === t.id;
-                const timerHtml = isActiveTimer ? `
-                    <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-cyan-500/50">
-                        <span class="text-cyan-400 font-mono font-bold text-sm tracking-wider" id="timer-display-${t.id}">${this.formatTimer(this.state.activeTimerSeconds)}</span>
-                        <button onclick="window.App.pauseTimer()" class="text-rose-400 hover:text-rose-300 p-1"><i data-lucide="pause-circle" class="w-4 h-4"></i></button>
-                    </div>
-                ` : (!isCompleted ? `
-                    <button onclick="window.App.startTimer('${t.id}', ${t.duration})" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold border border-white/10 transition-colors"><i data-lucide="play-circle" class="w-4 h-4"></i> Play Timer</button>
-                ` : '');
+                const isCurrentTaskTimer = this.state.activeTimerId === t.id;
+                const isTimerRunning = isCurrentTaskTimer && this.state.timerIntervalObj !== null;
+                const isTimerPaused = isCurrentTaskTimer && this.state.timerIntervalObj === null && this.state.activeTimerSeconds > 0;
+
+                let timerHtml = '';
+                if (isTimerRunning) {
+                    timerHtml = `
+                        <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+                            <i data-lucide="clock" class="w-4 h-4 text-cyan-400 animate-pulse"></i>
+                            <span class="text-cyan-400 font-mono font-bold text-sm tracking-wider" id="timer-display-${t.id}">${this.formatTimer(this.state.activeTimerSeconds)}</span>
+                            <button onclick="window.App.pauseTimer()" class="text-amber-400 hover:text-amber-300 p-1.5 bg-amber-400/10 rounded-md transition-colors" title="Pausar"><i data-lucide="pause-circle" class="w-4 h-4"></i></button>
+                        </div>
+                    `;
+                } else if (isTimerPaused) {
+                    timerHtml = `
+                        <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-amber-500/50">
+                            <span class="text-amber-400 font-mono font-bold text-sm tracking-wider" id="timer-display-${t.id}">${this.formatTimer(this.state.activeTimerSeconds)}</span>
+                            <button onclick="window.App.startTimer('${t.id}', ${t.duration})" class="text-emerald-400 hover:text-emerald-300 p-1.5 bg-emerald-400/10 rounded-md transition-colors font-bold text-xs flex items-center gap-1" title="Continuar"><i data-lucide="play" class="w-3 h-3"></i> Continuar</button>
+                        </div>
+                    `;
+                } else if (!isCompleted) {
+                    timerHtml = `
+                        <button onclick="window.App.startTimer('${t.id}', ${t.duration})" class="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-[0_0_10px_rgba(139,92,246,0.3)] transition-colors"><i data-lucide="play" class="w-4 h-4"></i> Iniciar estudo</button>
+                    `;
+                }
 
                 let questionsInputHtml = '';
                 if (isQuestions && this.state.activeTaskInputId === t.id && !isCompleted) {
@@ -1800,23 +1903,48 @@
                     </div>`;
                 }
 
+                const cleanTopic = (t.topic || '').replace(/\(1h de.*?\)/gi, '').trim();
+                
+                let ludicLabel = '';
+                let ludicDesc = '';
+                let iconTask = '';
+                if (t.type === 'teoria') {
+                    ludicLabel = 'Absorção de Teoria';
+                    ludicDesc = 'Foco total! Construa sua base mental.';
+                    iconTask = 'book-open';
+                } else if (t.type === 'revisao') {
+                    ludicLabel = 'Revisão Turbinada';
+                    ludicDesc = 'Resgate na memória. O segredo da aprovação.';
+                    iconTask = 'refresh-cw';
+                } else if (t.type === 'questoes') {
+                    ludicLabel = 'Arena de Questões';
+                    ludicDesc = 'Teste seus conhecimentos. Mostre quem manda!';
+                    iconTask = 'swords';
+                } else {
+                    ludicLabel = 'Missão Ativa';
+                    ludicDesc = 'Avance mais um passo.';
+                    iconTask = 'target';
+                }
+
                 return `
                 <div class="p-4 md:p-5 rounded-xl border ${bgClass} ${opacity} transition-all relative group shadow-md hover:shadow-lg hover:border-${color}-500/50 mb-3">
                     <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                         <div class="flex items-start gap-3 w-full md:w-auto">
-                            <button onclick="window.App.toggleStudentTask('${t.id}')" class="mt-1 w-6 h-6 rounded-full border-2 ${isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500 hover:border-violet-400'} flex items-center justify-center flex-shrink-0 transition-colors">
+                            <button onclick="window.App.toggleStudentTask('${t.id}')" class="mt-1.5 w-6 h-6 rounded-full border-2 ${isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500 hover:border-violet-400'} flex items-center justify-center flex-shrink-0 transition-colors">
                                 ${isCompleted ? '<i data-lucide="check" class="text-white w-4 h-4"></i>' : ''}
                             </button>
                             <div class="flex-1">
-                                <div class="flex items-center gap-2 mb-1">
+                                <div class="flex flex-wrap items-center gap-2 mb-1.5">
                                     <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-${color}-400 bg-${color}-500/10 px-2 py-0.5 rounded border border-${color}-500/20">${this.formatDateBR(t.date)}</span>
-                                    <span class="text-[10px] md:text-xs text-slate-400 font-bold">${t.duration} min</span>
+                                    <span class="text-[10px] md:text-xs font-black text-${color}-200 bg-${color}-600/30 px-2 py-0.5 rounded-md border border-${color}-500/40 flex items-center gap-1"><i data-lucide="${iconTask}" class="w-3 h-3"></i> ${ludicLabel}</span>
+                                    <span class="text-[10px] md:text-xs text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1"><i data-lucide="hourglass" class="w-3 h-3"></i> ${t.duration} min</span>
                                     ${isQuestions && isCompleted ? `<span class="text-[10px] md:text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">${t.qCorrect}/${t.qTotal} Acertos</span>` : ''}
                                 </div>
-                                <p class="text-white text-sm md:text-base font-bold leading-snug ${isCompleted ? 'line-through text-slate-400' : ''}">${t.topic}</p>
+                                <p class="text-white text-sm md:text-base font-bold leading-snug ${isCompleted ? 'line-through text-slate-500' : ''}">${cleanTopic}</p>
+                                ${!isCompleted ? `<p class="text-[10px] md:text-xs text-slate-400 font-medium mt-1 flex items-center gap-1"><i data-lucide="info" class="w-3 h-3"></i> ${ludicDesc}</p>` : ''}
                             </div>
                         </div>
-                        <div class="flex items-center justify-end w-full md:w-auto gap-3">
+                        <div class="flex items-center justify-end w-full md:w-auto gap-3 mt-2 md:mt-0">
                             ${timerHtml}
                         </div>
                     </div>
