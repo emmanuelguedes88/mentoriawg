@@ -21,7 +21,6 @@
         .glass-input:focus { outline: none; border-color: rgba(139, 92, 246, 0.7); box-shadow: 0 0 15px rgba(139, 92, 246, 0.4); background: rgba(0, 0, 0, 0.6); }
         .neon-text { text-shadow: 0 0 15px rgba(167, 139, 250, 0.6), 0 0 30px rgba(167, 139, 250, 0.4); }
         
-        .perspective-1000 { perspective: 1000px; }
         .transform-style-3d { transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); }
         .backface-hidden { backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
@@ -36,18 +35,6 @@
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-
-        @keyframes expandDown { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 200px; } }
-        .animate-expand { animation: expandDown 0.4s ease-out forwards; overflow: hidden; }
-
-        .mindmap-node { position: relative; z-index: 10; transition: transform 0.3s, box-shadow 0.3s; }
-        .mindmap-node:hover { transform: translateY(-3px); }
-        
-        @keyframes flowLine { 0% { stroke-dashoffset: 24; } 100% { stroke-dashoffset: 0; } }
-        .path-flow { stroke-dasharray: 6; animation: flowLine 1s linear infinite; }
-        
-        .mindmap-line-v { position: absolute; width: 2px; background: linear-gradient(to bottom, var(--glow-color), transparent); left: 50%; transform: translateX(-50%); z-index: 1; }
-        .mindmap-line-h { position: absolute; height: 2px; background: linear-gradient(to right, transparent, var(--glow-color), transparent); top: 32px; z-index: 1; }
 
         .radio-card:checked + div {
             border-color: rgba(139, 92, 246, 0.8);
@@ -87,8 +74,8 @@
         // IMAGENS OFICIAIS
         const teacherImage = "https://firebasestorage.googleapis.com/v0/b/mentoriawg.firebasestorage.app/o/IMG-20220428-WA0066.jpg?alt=media&token=6fd11f19-d0c9-4f06-adb6-ec31d3f1854e";
         const studentImage = "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?auto=format&fit=crop&w=150&q=80";
-        
         const fallbackImage = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80";
+        
         const bgImages = [
             "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1920&q=80", 
             "https://images.unsplash.com/photo-1532012197267-da84d127e765?auto=format&fit=crop&w=1920&q=80", 
@@ -109,8 +96,6 @@
                 loading: true,
                 authView: 'select',
                 authError: '',
-                
-                // Forçando o logotipo a ser a foto da mentora
                 platformLogo: teacherImage,
                 
                 activeTab: 'dashboard',
@@ -131,19 +116,15 @@
 
                 activeTaskInputId: null, 
                 
-                // MENTORA: Controle do Editor de Cronograma
+                // Editor de Cronograma
                 editalForms: [{ id: Date.now(), name: '', content: '' }],
                 parsedBlocks: null,
-
-                // CONFIGURAÇÕES DE CRONOGRAMA FLEXIVEL/INTENSIVO
                 scheduleMode: 'flex',
                 scheduleStartDate: new Date().toISOString().split('T')[0],
                 scheduleEndDate: (() => { let d = new Date(); d.setDate(d.getDate()+30); return d.toISOString().split('T')[0]; })(),
                 
                 confirmDeleteId: null,
-                
                 isCardFlipped: false,
-                expandedMindMapId: null,
                 
                 activeTimerId: null,
                 activeTimerSeconds: 0,
@@ -153,6 +134,18 @@
 
             init: function() {
                 this.initCarousel();
+                
+                try {
+                    const logoRef = doc(db, 'settings', 'platform');
+                    const logoUnsub = onSnapshot(logoRef, (snap) => {
+                        if (snap.exists() && snap.data().platformLogo) {
+                            this.state.platformLogo = snap.data().platformLogo;
+                            localStorage.setItem('customPlatformLogo', snap.data().platformLogo);
+                            this.render();
+                        }
+                    }, (err) => {});
+                    this.unsubs.push(logoUnsub);
+                } catch(e) {}
                 
                 onAuthStateChanged(auth, (user) => {
                     this.state.user = user;
@@ -311,12 +304,42 @@
                 if(input.files[0]) {
                     const b64 = await this.compressImg(input.files[0]);
                     this.state.platformLogo = b64;
+                    localStorage.setItem('customPlatformLogo', b64);
+                    try {
+                        await setDoc(doc(db, 'settings', 'platform'), { platformLogo: b64 }, { merge: true });
+                    } catch(e) {}
                     this.render();
                 }
             },
 
+            startTimer: function(taskId, totalMins) {
+                if (this.state.activeTimerId === taskId && this.state.timerIntervalObj) return; 
+                if (this.state.activeTimerId !== taskId) {
+                    this.state.activeTimerId = taskId;
+                    this.state.activeTimerSeconds = totalMins * 60;
+                }
+                if(this.state.timerIntervalObj) clearInterval(this.state.timerIntervalObj);
+                this.state.timerIntervalObj = setInterval(() => {
+                    if (this.state.activeTimerSeconds > 0) {
+                        this.state.activeTimerSeconds--;
+                        const el = document.getElementById(`timer-display-${taskId}`);
+                        if(el) el.innerText = this.formatTimer(this.state.activeTimerSeconds);
+                    } else {
+                        this.pauseTimer();
+                    }
+                }, 1000);
+                this.render();
+            },
+            pauseTimer: function() {
+                if(this.state.timerIntervalObj) {
+                    clearInterval(this.state.timerIntervalObj);
+                    this.state.timerIntervalObj = null;
+                }
+                this.render();
+            },
+
             // -------------------------------------------------------------------------
-            // LOGIN E AUTENTICAÇÃO
+            // LOGIN E AUTENTICAÇÃO (ORIGINAL)
             // -------------------------------------------------------------------------
             loginStudent: async function(e) {
                 e.preventDefault();
@@ -334,7 +357,6 @@
                 
                 try {
                     const cred = await signInWithEmailAndPassword(auth, em, pw);
-                    
                     try {
                         const docRef = doc(db, 'users', cred.user.uid);
                         const d = await getDoc(docRef);
@@ -404,7 +426,6 @@
 
                 try {
                     await signInWithEmailAndPassword(auth, em, pw);
-                    
                     try {
                         const docRef = doc(db, 'users', auth.currentUser.uid);
                         const d = await getDoc(docRef);
@@ -438,7 +459,7 @@
             },
 
             // -------------------------------------------------------------------------
-            // FUNÇÕES DE ROTINA MANTIDAS
+            // ROTINAS DA APLICAÇÃO
             // -------------------------------------------------------------------------
             updateSchedVal: function(day, delta) {
                 let cur = this.state.schedule[day] || 0;
@@ -480,13 +501,14 @@
                 const title = document.getElementById('cls-title').value;
                 const subject = document.getElementById('cls-subj').value;
                 const date = document.getElementById('cls-date').value;
-                
+                const studentId = document.getElementById('cls-studentId') ? document.getElementById('cls-studentId').value : null;
+
                 try {
                     if(this.state.editingClassId) {
-                        await updateDoc(doc(db, 'classes', this.state.editingClassId), { title, subject, date });
+                        await updateDoc(doc(db, 'classes', this.state.editingClassId), { title, subject, date, studentId });
                         this.state.editingClassId = null;
                     } else {
-                        await addDoc(collection(db, 'classes'), { title, subject, date, createdAt: new Date().toISOString() });
+                        await addDoc(collection(db, 'classes'), { title, subject, date, studentId, createdAt: new Date().toISOString() });
                     }
                     this.render(); 
                 } catch(err) { 
@@ -503,6 +525,7 @@
                     document.getElementById('cls-title').value = cls.title;
                     document.getElementById('cls-subj').value = cls.subject;
                     document.getElementById('cls-date').value = cls.date;
+                    if(document.getElementById('cls-studentId')) document.getElementById('cls-studentId').value = cls.studentId || '';
                     document.getElementById('cls-form').scrollIntoView({behavior: 'smooth'});
                 }, 50);
             },
@@ -527,7 +550,7 @@
             },
 
             // -------------------------------------------------------------------------
-            // NOVO CRONOGRAMA: LÓGICA ESTRUTURAL
+            // CÓDIGO DE CRONOGRAMA: ALUNO E MENTORA
             // -------------------------------------------------------------------------
             setScheduleMode: function(mode) {
                 this.state.scheduleMode = mode;
@@ -610,11 +633,7 @@
                 this.render();
             },
             addNewBlock: function() {
-                this.state.parsedBlocks.unshift({
-                    id: 'b_' + Date.now(),
-                    discipline: 'NOVA DISCIPLINA',
-                    content: '1 Novo Assunto'
-                });
+                this.state.parsedBlocks.unshift({ id: 'b_' + Date.now(), discipline: 'NOVA DISCIPLINA', content: '1 Novo Assunto' });
                 this.render();
             },
             updateParsedBlock: function(id, field, value) {
@@ -626,32 +645,63 @@
                 if (this.state.confirmDeleteId === studentId) {
                     try {
                         await updateDoc(doc(db, 'users', studentId), {
-                            generatedSchedule: [], flashcards: [], rawEdital: ''
+                            generatedSchedule: [], flashcards: [], rawEdital: '', scheduleStatus: 'none'
                         });
                         this.state.parsedBlocks = null;
                         this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
                         this.state.confirmDeleteId = null;
-                        this.notify('Cronograma do aluno foi apagado.');
+                        this.notify('Cronograma apagado para recriação.');
                         this.render();
                     } catch(e) { this.notify('Erro ao excluir no Firebase.', true); }
                 } else {
                     this.state.confirmDeleteId = studentId;
                     this.render();
                     setTimeout(() => { 
-                        if(this.state.confirmDeleteId === studentId) {
-                            this.state.confirmDeleteId = null; 
-                            this.render(); 
-                        }
+                        if(this.state.confirmDeleteId === studentId) { this.state.confirmDeleteId = null; this.render(); }
                     }, 4000);
                 }
             },
 
-            finalizeSchedule: async function(studentId) {
-                const stu = this.state.students.find(s=>s.id===studentId);
-                const blocks = this.state.parsedBlocks;
+            editStudentSchedule: async function(studentId) {
+                const isMentor = this.state.userData && this.state.userData.role === 'mentor';
+                let uData = isMentor ? this.state.students.find(s=>s.id===studentId) : this.state.userData;
+                if(!uData) return;
 
+                if (uData.savedEditalForms && uData.savedEditalForms.length > 0) {
+                    this.state.editalForms = JSON.parse(JSON.stringify(uData.savedEditalForms));
+                    if(uData.savedScheduleMode) this.state.scheduleMode = uData.savedScheduleMode;
+                    if(uData.savedScheduleStartDate) this.state.scheduleStartDate = uData.savedScheduleStartDate;
+                    if(uData.savedScheduleEndDate) this.state.scheduleEndDate = uData.savedScheduleEndDate;
+                } else {
+                    this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
+                }
+                this.state.parsedBlocks = null;
+
+                try {
+                    await updateDoc(doc(db, 'users', studentId), {
+                        generatedSchedule: [], flashcards: [], scheduleStatus: 'none'
+                    });
+                    this.notify('Modo de edição ativado. Edite e gere novamente.');
+                    this.render();
+                } catch(e) { this.notify('Erro ao editar no Firebase.', true); }
+            },
+
+            approveStudentSchedule: async function(studentId) {
+                try {
+                    await updateDoc(doc(db, 'users', studentId), { scheduleStatus: 'approved' });
+                    this.notify("Cronograma aprovado com sucesso!");
+                    this.render();
+                } catch(e) { this.notify("Erro ao aprovar.", true); }
+            },
+
+            finalizeSchedule: async function(studentId) {
+                const isMentor = this.state.userData && this.state.userData.role === 'mentor';
+                let stu = isMentor ? this.state.students.find(s=>s.id===studentId) : this.state.userData;
+                if (!stu) return;
+
+                const blocks = this.state.parsedBlocks;
                 if(!blocks || blocks.length === 0) return this.notify('Não há blocos para gerar.', true);
-                if(!stu.schedule) return this.notify('O aluno precisa ter horas cadastradas no perfil.', true);
+                if(!stu.schedule) return this.notify('É preciso ter horas cadastradas no perfil.', true);
 
                 const isIntensive = this.state.scheduleMode === 'intensive';
                 const startDate = new Date(this.state.scheduleStartDate + 'T00:00:00');
@@ -661,22 +711,31 @@
                 if (isIntensive) {
                     const endDate = new Date(this.state.scheduleEndDate + 'T23:59:59');
                     if (endDate < startDate) return this.notify("A data do fim deve ser maior que o início.", true);
-                    result = this.generateIntensiveSchedule(blocks, stu.schedule, startDate, endDate);
+                    result = this._generateIntensive(blocks, stu.schedule, startDate, endDate);
                 } else {
-                    result = this.generateFlexibleSchedule(blocks, stu.schedule, startDate);
+                    result = this._generateFlexible(blocks, stu.schedule, startDate);
                 }
 
                 if(!result || result.draft.length === 0) return;
 
                 try {
+                    const status = isMentor ? 'approved' : 'pending';
                     await updateDoc(doc(db, 'users', studentId), {
                         generatedSchedule: result.draft,
                         flashcards: [...(stu.flashcards || []), ...(result.fcards || [])],
-                        rawEdital: "Cronograma Estruturado Gerado."
+                        rawEdital: "Cronograma Estruturado Gerado.",
+                        scheduleStatus: status,
+                        savedEditalForms: this.state.editalForms,
+                        savedScheduleMode: this.state.scheduleMode,
+                        savedScheduleStartDate: this.state.scheduleStartDate,
+                        savedScheduleEndDate: this.state.scheduleEndDate
                     });
                     this.state.parsedBlocks = null;
                     this.state.editalForms = [{ id: Date.now(), name: '', content: '' }];
-                    this.notify("Cronograma criado com sucesso!");
+                    
+                    if (isMentor) this.notify("Cronograma APROVADO com sucesso!");
+                    else this.notify("Cronograma gerado! Aguardando aprovação da Mentora.");
+                    
                     this.render();
                 } catch(e) {
                     console.error(e);
@@ -684,8 +743,7 @@
                 }
             },
 
-            // MODO FLEXÍVEL
-            generateFlexibleSchedule: function(rawBlocks, scheduleConfig, baseDate) {
+            _generateFlexible: function(rawBlocks, scheduleConfig, baseDate) {
                 let draft = [];
                 let fcards = [];
                 let scheduledTasks = []; 
@@ -714,69 +772,78 @@
                 const daysKeys = ['dom','seg','ter','qua','qui','sex','sab'];
                 let tIdCounter = 0;
 
+                const advanceToValidDay = (d) => {
+                    let dCopy = new Date(d);
+                    let count = 0;
+                    while((scheduleConfig[daysKeys[dCopy.getDay()]] || 0) === 0 && count < 14) { dCopy.setDate(dCopy.getDate() + 1); count++; }
+                    return dCopy;
+                };
+
+                let currDate = advanceToValidDay(baseDate);
+
                 while ((Object.values(unstudied).some(arr => arr.length > 0) || scheduledTasks.some(t => !t.done)) && currentDayCount <= 730) {
+                    let dayKey = daysKeys[currDate.getDay()];
+                    let totalHoursAvailable = Math.floor(scheduleConfig[dayKey] || 0); 
                     
-                    let currentDate = new Date(baseDate);
-                    currentDate.setDate(currentDate.getDate() + (currentDayCount - 1));
-                    const dayOfWeekIdx = currentDate.getDay();
-                    const hoursToday = scheduleConfig[daysKeys[dayOfWeekIdx]] || 0;
+                    if (totalHoursAvailable > 0) {
+                        for (let h = 0; h < totalHoursAvailable; h++) {
+                            let pending = scheduledTasks.filter(t => t.dayDue <= currentDayCount && !t.done);
+                            pending.sort((a, b) => a.priority - b.priority || a.dayDue - b.dayDue);
 
-                    for (let h = 0; h < hoursToday; h++) {
-                        let pending = scheduledTasks.filter(t => t.dayDue <= currentDayCount && !t.done);
-                        pending.sort((a, b) => a.priority - b.priority || a.dayDue - b.dayDue);
+                            let offset = currDate.getTimezoneOffset() * 60000;
+                            let dateStr = (new Date(currDate.getTime() - offset)).toISOString().split('T')[0];
 
-                        let offset = currentDate.getTimezoneOffset() * 60000;
-                        let dateStr = (new Date(currentDate.getTime() - offset)).toISOString().split('T')[0];
-
-                        if (pending.length > 0 && pending[0].priority <= 1) { 
-                            let task = pending[0];
-                            task.done = true;
-                            draft.push({
-                                id: 'tsk_' + Date.now() + '_' + (tIdCounter++),
-                                topic: `${task.topic.discipline}: ${task.topic.content}`,
-                                subject: task.topic.discipline, type: 'questoes', duration: 60, date: dateStr, completed: false, qTotal: 0, qCorrect: 0
-                            });
-                        } else {
-                            let newTopic = getNextUnstudiedTopic();
-                            if (newTopic) {
-                                let tId = Date.now() + '_' + (tIdCounter++);
-                                draft.push({
-                                    id: 'tsk_' + tId,
-                                    topic: `${newTopic.discipline}: ${newTopic.content}`,
-                                    subject: newTopic.discipline, type: 'teoria', duration: 60, date: dateStr, completed: false
-                                });
-                                
-                                scheduledTasks.push({ dayDue: currentDayCount + 1, topic: newTopic, priority: 1, done: false }); 
-                                scheduledTasks.push({ dayDue: currentDayCount + 7, topic: newTopic, priority: 3, done: false, isRev: true });
-                                scheduledTasks.push({ dayDue: currentDayCount + 15, topic: newTopic, priority: 3, done: false, isRev: true });
-                                scheduledTasks.push({ dayDue: currentDayCount + 30, topic: newTopic, priority: 3, done: false, isRev: true });
-
-                                fcards.push({
-                                    id: 'fc_'+tId, 
-                                    front: `📚 [${newTopic.discipline}]\n\nComo examinador de banca de concurso, exijo que você domine este tema:\n"${newTopic.content.substring(0, 80)}..."\n\nQual é a regra geral fundamental deste tópico e quais são as suas principais exceções?`, 
-                                    back: `💡 Gabarito do Especialista:\n\nPara gabaritar este tópico, você não pode esquecer a regra matriz e os casos de exceção. As bancas adoram usar palavras restritivas (como 'salvo', 'exceto', 'somente') nas exceções deste exato assunto. Revise os prazos, as competências e as palavras-chave que diferenciam a regra da exceção!`,
-                                    nextReviewDate: dateStr, interval: 1, easeFactor: 2.5
-                                });
-                            } else if (pending.length > 0) { 
+                            if (pending.length > 0 && pending[0].priority <= 1) { 
                                 let task = pending[0];
                                 task.done = true;
                                 draft.push({
                                     id: 'tsk_' + Date.now() + '_' + (tIdCounter++),
                                     topic: `${task.topic.discipline}: ${task.topic.content}`,
-                                    subject: task.topic.discipline, type: 'revisao', duration: 60, date: dateStr, completed: false
+                                    subject: task.topic.discipline, type: 'questoes', duration: 60, date: dateStr, completed: false, qTotal: 0, qCorrect: 0
                                 });
                             } else {
-                                break; 
+                                let newTopic = getNextUnstudiedTopic();
+                                if (newTopic) {
+                                    let tId = Date.now() + '_' + (tIdCounter++);
+                                    draft.push({
+                                        id: 'tsk_' + tId,
+                                        topic: `${newTopic.discipline}: ${newTopic.content}`,
+                                        subject: newTopic.discipline, type: 'teoria', duration: 60, date: dateStr, completed: false
+                                    });
+                                    
+                                    scheduledTasks.push({ dayDue: currentDayCount + 1, topic: newTopic, priority: 1, done: false }); 
+                                    scheduledTasks.push({ dayDue: currentDayCount + 7, topic: newTopic, priority: 3, done: false, isRev: true });
+                                    scheduledTasks.push({ dayDue: currentDayCount + 15, topic: newTopic, priority: 3, done: false, isRev: true });
+                                    scheduledTasks.push({ dayDue: currentDayCount + 30, topic: newTopic, priority: 3, done: false, isRev: true });
+
+                                    fcards.push({
+                                        id: 'fc_'+tId, 
+                                        front: `📚 [${newTopic.discipline}]\n\nComo examinador de banca de concurso, exijo que você domine este tema:\n"${newTopic.content.substring(0, 80)}..."\n\nQual é a regra geral fundamental deste tópico e quais são as suas principais exceções?`, 
+                                        back: `💡 Gabarito do Especialista:\n\nPara gabaritar este tópico, você não pode esquecer a regra matriz e os casos de exceção. As bancas adoram usar palavras restritivas (como 'salvo', 'exceto', 'somente') nas exceções deste exato assunto. Revise os prazos, as competências e as palavras-chave que diferenciam a regra da exceção!`,
+                                        nextReviewDate: dateStr, interval: 1, easeFactor: 2.5
+                                    });
+                                } else if (pending.length > 0) { 
+                                    let task = pending[0];
+                                    task.done = true;
+                                    draft.push({
+                                        id: 'tsk_' + Date.now() + '_' + (tIdCounter++),
+                                        topic: `${task.topic.discipline}: ${task.topic.content}`,
+                                        subject: task.topic.discipline, type: 'revisao', duration: 60, date: dateStr, completed: false
+                                    });
+                                } else {
+                                    break; 
+                                }
                             }
                         }
                     }
+                    currDate.setDate(currDate.getDate() + 1);
+                    currDate = advanceToValidDay(currDate);
                     currentDayCount++;
                 }
                 return { draft, fcards };
             },
 
-            // MODO INTENSIVO
-            generateIntensiveSchedule: function(rawBlocks, scheduleConfig, startDate, endDate) {
+            _generateIntensive: function(rawBlocks, scheduleConfig, startDate, endDate) {
                 let availableSlots = [];
                 let currentDate = new Date(startDate);
                 const daysKeys = ['dom','seg','ter','qua','qui','sex','sab'];
@@ -939,6 +1006,11 @@
 
             toggleStudentTask: async function(taskId) {
                 const u = this.state.userData;
+                
+                if(u.role === 'student' && u.scheduleStatus === 'pending') {
+                    return this.notify("Aguarde a mentora aprovar seu cronograma.", true);
+                }
+
                 if(!u.generatedSchedule) return;
                 const newSched = [...u.generatedSchedule];
                 const task = newSched.find(t => t.id === taskId);
@@ -961,35 +1033,6 @@
                 }
 
                 try { await updateDoc(doc(db, 'users', u.id), { generatedSchedule: newSched }); } catch(e){}
-            },
-
-            startTimer: function(taskId, totalMins) {
-                if (this.state.activeTimerId === taskId && this.state.timerIntervalObj) return; 
-                
-                if (this.state.activeTimerId !== taskId) {
-                    this.state.activeTimerId = taskId;
-                    this.state.activeTimerSeconds = totalMins * 60;
-                }
-                
-                if(this.state.timerIntervalObj) clearInterval(this.state.timerIntervalObj);
-                
-                this.state.timerIntervalObj = setInterval(() => {
-                    if (this.state.activeTimerSeconds > 0) {
-                        this.state.activeTimerSeconds--;
-                        const el = document.getElementById(`timer-display-${taskId}`);
-                        if(el) el.innerText = this.formatTimer(this.state.activeTimerSeconds);
-                    } else {
-                        this.pauseTimer();
-                    }
-                }, 1000);
-                this.render();
-            },
-            pauseTimer: function() {
-                if(this.state.timerIntervalObj) {
-                    clearInterval(this.state.timerIntervalObj);
-                    this.state.timerIntervalObj = null;
-                }
-                this.render();
             },
 
             saveQuestionsTask: async function(taskId) {
@@ -1086,18 +1129,23 @@
 
             flipCard: function() { this.state.isCardFlipped = !this.state.isCardFlipped; this.render(); },
 
-            // =========================================================================
-            // RENDERIZAÇÃO DE TELAS RESTAURADA
-            // =========================================================================
+            // -------------------------------------------------------------------------
+            // RENDERIZAÇÃO DAS TELAS
+            // -------------------------------------------------------------------------
             render: function() {
                 const root = document.getElementById('app-root');
                 if (this.state.loading) return; 
                 
                 let html = '';
-                if (!this.state.userData) html = this.getAuthHtml();
-                else if (this.state.userData.status === 'pending') html = this.getPendingHtml();
-                else if (this.state.userData.role === 'mentor') html = this.getMentorHtml();
-                else html = this.getStudentHtml();
+                if (!this.state.userData) {
+                    html = this.getAuthHtml();
+                } else if (this.state.userData.status === 'pending') {
+                    html = this.getPendingHtml();
+                } else if (this.state.userData.role === 'mentor') {
+                    html = this.getMentorHtml();
+                } else {
+                    html = this.getStudentHtml(); 
+                }
 
                 root.innerHTML = html;
                 lucide.createIcons(); 
@@ -1107,14 +1155,19 @@
                 const logo = this.state.platformLogo;
                 if(isSmall) {
                     return `
-                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-lg overflow-hidden bg-slate-800">
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-lg overflow-hidden cursor-pointer bg-slate-800" onclick="document.getElementById('global-logo-upload').click()">
+                        <input type="file" id="global-logo-upload" onchange="window.App.uploadLogo(this)" class="hidden" accept="image/*"/>
                         <img src="${logo}" onerror="this.src='${fallbackImage}'" class="w-full h-full object-cover bg-white"/>
                     </div>`;
                 }
                 return `
-                <div class="relative w-24 h-24 md:w-32 md:h-32 mx-auto mb-4 md:mb-6">
+                <div class="relative w-24 h-24 md:w-32 md:h-32 mx-auto mb-4 md:mb-6 group cursor-pointer" onclick="document.getElementById('global-logo-upload').click()">
+                    <input type="file" id="global-logo-upload" onchange="window.App.uploadLogo(this)" class="hidden" accept="image/*"/>
                     <div class="w-full h-full rounded-full overflow-hidden border-4 border-violet-500/50 shadow-[0_0_40px_rgba(139,92,246,0.6)] bg-white flex items-center justify-center">
                         <img src="${logo}" onerror="this.src='${fallbackImage}'" class="w-full h-full object-cover"/>
+                    </div>
+                    <div class="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i data-lucide="camera" class="text-white w-5 h-5 md:w-6 md:h-6 mb-1"></i><span class="text-[8px] md:text-[10px] text-white font-bold uppercase tracking-wider">Alterar</span>
                     </div>
                 </div>`;
             },
@@ -1188,7 +1241,7 @@
                         <div class="glass-panel p-5 md:p-10 rounded-2xl md:rounded-[2.5rem] w-full max-w-[95%] md:max-w-3xl shadow-2xl animate-fade-in my-auto">
                             <button onclick="window.App.setView('loginStudent')" class="text-slate-400 hover:text-white flex items-center gap-2 mb-4 md:mb-6 text-xs md:text-sm"><i data-lucide="chevron-left" class="w-4 h-4"></i> Voltar</button>
                             <h2 class="text-xl md:text-2xl font-extrabold text-white mb-1 md:mb-2">Criar Perfil</h2>
-                            <p class="text-slate-400 mb-4 md:mb-6 text-xs md:text-sm">Preencha para a mentora gerar seu cronograma.</p>
+                            <p class="text-slate-400 mb-4 md:mb-6 text-xs md:text-sm">Preencha os dados abaixo.</p>
                             ${err}
                             <form onsubmit="window.App.registerStudent(event)" class="space-y-4 md:space-y-5">
                                 <div class="flex justify-center mb-2">
@@ -1220,14 +1273,13 @@
                 }
                 else if(v === 'loginMentor') {
                     const em = this.state.lastTypedEmail || localStorage.getItem('wg_m_em') || 'wanessa@mentoriawg.com';
-                    const pw = this.state.lastTypedPw || this.getSafePw('wg_m_pw') || 'master123';
-                    const savedAvatar = teacherImage;
+                    const pw = this.state.lastTypedPw || this.getSafePw('wg_m_pw') || '';
                     return `
                     <div class="h-full w-full overflow-y-auto flex items-center justify-center p-3 sm:p-4 py-12 custom-scrollbar">
                         <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] w-full max-w-[95%] sm:max-w-sm md:max-w-md shadow-2xl text-center animate-fade-in my-auto relative">
                             <button onclick="window.App.setView('select')" class="text-slate-400 hover:text-white flex items-center gap-1 md:gap-2 mb-4 md:mb-6 absolute top-4 left-4 md:top-6 md:left-6 text-xs md:text-sm"><i data-lucide="chevron-left" class="w-4 h-4 md:w-5 md:h-5"></i> Voltar</button>
                             <div class="w-20 h-20 md:w-24 md:h-24 mx-auto rounded-full overflow-hidden border-2 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] mb-4 md:mb-6 mt-6 md:mt-8">
-                                <img src="${savedAvatar}" onerror="this.src='${fallbackImage}'" class="w-full h-full object-cover" />
+                                <img src="${teacherImage}" onerror="this.src='${fallbackImage}'" class="w-full h-full object-cover" />
                             </div>
                             <h2 class="text-2xl md:text-3xl font-extrabold text-white mb-2">Olá, Wanessa!</h2>
                             <p class="text-slate-400 mb-6 md:mb-8 text-sm md:text-base">Pronta para guiar a sua turma hoje?</p>
@@ -1236,7 +1288,7 @@
                                 <div class="relative"><i data-lucide="mail" class="absolute left-3.5 top-3.5 text-slate-500 w-4 h-4 md:w-5 md:h-5"></i><input id="men-em" type="email" placeholder="E-mail da Mentora" value="${em}" class="w-full glass-input rounded-xl py-2.5 md:py-3 pl-10 md:pl-12 pr-4 text-center text-sm md:text-base" required /></div>
                                 <div class="relative">
                                     <i data-lucide="lock" class="absolute left-3.5 top-3.5 text-slate-500 w-4 h-4 md:w-5 md:h-5"></i>
-                                    <input id="men-pw" type="password" placeholder="Senha Mestre" value="${pw}" class="w-full glass-input rounded-xl py-2.5 md:py-3 pl-10 md:pl-12 pr-10 text-center tracking-widest text-sm md:text-base" required />
+                                    <input id="men-pw" type="password" placeholder="Senha" value="${pw}" class="w-full glass-input rounded-xl py-2.5 md:py-3 pl-10 md:pl-12 pr-10 text-center tracking-widest text-sm md:text-base" required />
                                     <button type="button" id="btn-men-pw" onclick="window.App.togglePassword('men-pw')" class="absolute right-3.5 top-3 text-slate-500 hover:text-white focus:outline-none"><i data-lucide="eye" class="w-4 h-4 md:w-5 md:h-5"></i></button>
                                 </div>
                                 <label class="flex items-center justify-center gap-2 cursor-pointer text-xs md:text-sm text-slate-300 w-fit mx-auto"><input type="checkbox" id="men-rem" ${em?'checked':''} class="rounded bg-black/40 border-white/20 text-cyan-500" /> Lembrar meus dados</label>
@@ -1265,7 +1317,6 @@
                 const m = this.state.userData || {};
                 const tab = this.state.activeTab;
                 const safeName = (m.name || 'Wanessa').split(' ')[0];
-                
                 const navItems = [
                     { id: 'dashboard', label: 'Visão da Turma' },
                     { id: 'classes', label: 'Registrar Aulas' }
@@ -1279,6 +1330,7 @@
                 <aside class="fixed inset-y-0 left-0 z-50 w-64 md:w-72 glass-panel border-r border-white/10 shadow-2xl transform transition-transform duration-300 md:relative md:translate-x-0 flex flex-col ${this.state.isMenuOpen ? 'translate-x-0' : '-translate-x-full'}">
                     <div class="p-6 md:p-8 border-b border-white/5 text-center bg-slate-900/40 relative">
                         <button class="md:hidden absolute top-4 right-4 text-slate-300 hover:text-white" onclick="window.App.toggleMenu()"><i data-lucide="x" class="w-5 h-5"></i></button>
+                        
                         <div class="w-20 h-20 md:w-24 md:h-24 mx-auto rounded-full overflow-hidden border-2 md:border-4 border-cyan-400 shadow-[0_0_30px_rgba(6,182,212,0.5)] mb-3 md:mb-4 mt-6 md:mt-4 relative group cursor-pointer">
                             <img src="${teacherImage}" onerror="this.src='${fallbackImage}'" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                         </div>
@@ -1301,6 +1353,11 @@
                 if(this.state.selectedStudentId) {
                     const stu = this.state.students.find(s=>s.id === this.state.selectedStudentId);
                     
+                    if (!stu) {
+                        this.state.selectedStudentId = null;
+                        return this.render();
+                    }
+
                     const msgs = (stu.mentorMessages || []).map(msg => `
                         <div class="flex ${msg.role==='mentor'?'justify-end':'justify-start'}">
                             <div class="flex flex-col gap-1 max-w-[90%] md:max-w-[70%]">
@@ -1316,25 +1373,37 @@
                     let activeScheduleHtml = '';
 
                     if (stu.generatedSchedule && stu.generatedSchedule.length > 0) {
-                        
                         let deleteBtnHtml = '';
                         if (this.state.confirmDeleteId === stu.id) {
                             deleteBtnHtml = `
                             <div class="flex items-center gap-2 animate-fade-in bg-rose-950/80 p-1.5 md:p-2 rounded-xl border border-rose-500/50">
                                 <span class="text-white text-[10px] md:text-xs font-bold px-2 hidden sm:inline">Excluir tudo?</span>
-                                <button onclick="window.App.deleteStudentSchedule('${stu.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 md:px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-[0_0_10px_rgba(225,29,72,0.4)] flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 md:w-4 md:h-4"></i> Sim, Excluir</button>
+                                <button onclick="window.App.deleteStudentSchedule('${stu.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 md:px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-[0_0_10px_rgba(225,29,72,0.4)] flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 md:w-4 md:h-4"></i> Sim</button>
                                 <button onclick="window.App.state.confirmDeleteId = null; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors"><i data-lucide="x" class="w-3 h-3 md:w-4 md:h-4"></i></button>
                             </div>`;
                         } else {
                             deleteBtnHtml = `
-                            <button onclick="window.App.state.confirmDeleteId = '${stu.id}'; window.App.render();" class="w-full md:w-auto bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(225,29,72,0.4)]">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i> Excluir Cronograma Atual
-                            </button>`;
+                            <div class="flex gap-2 w-full md:w-auto">
+                                <button onclick="window.App.editStudentSchedule('${stu.id}')" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(37,99,235,0.4)]">
+                                    <i data-lucide="edit" class="w-4 h-4"></i> Editar
+                                </button>
+                                <button onclick="window.App.state.confirmDeleteId = '${stu.id}'; window.App.render();" class="flex-1 md:flex-none bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(225,29,72,0.4)]">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i> Excluir
+                                </button>
+                            </div>`;
                         }
 
+                        let pendingWarning = stu.scheduleStatus === 'pending' ? `
+                        <div class="bg-amber-500/20 border border-amber-500/50 p-4 rounded-xl mb-4 flex justify-between items-center">
+                            <div><h4 class="text-amber-400 font-bold text-sm md:text-base"><i data-lucide="clock" class="w-5 h-5 inline mb-1"></i> Cronograma Pendente</h4><p class="text-xs text-amber-200">O aluno gerou ou editou este cronograma e aguarda sua aprovação.</p></div>
+                            <button onclick="window.App.approveStudentSchedule('${stu.id}')" class="bg-emerald-500 hover:bg-emerald-400 text-white px-4 py-2 rounded-lg font-bold shadow-lg transition-colors text-xs md:text-sm"><i data-lucide="check" class="w-4 h-4 inline"></i> Aprovar</button>
+                        </div>
+                        ` : '';
+
                         activeScheduleHtml = `
+                        ${pendingWarning}
                         <div class="bg-emerald-900/20 border border-emerald-500/30 p-4 md:p-5 rounded-xl md:rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-                            <div class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-emerald-400"></i><span class="text-emerald-300 font-bold text-sm md:text-base">Cronograma Ativo</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-emerald-400"></i><span class="text-emerald-300 font-bold text-sm md:text-base">Cronograma ${stu.scheduleStatus === 'pending' ? 'Pendente' : 'Ativo'}</span></div>
                             ${deleteBtnHtml}
                         </div>
                         <div class="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2 mt-4 bg-black/20 p-2 rounded-xl border border-white/5">
@@ -1351,15 +1420,21 @@
                                 </div>`;
                             }).join('')}
                         </div>
-                        <hr class="border-white/10 my-8"/>
-                        <h4 class="text-white font-bold text-lg md:text-xl mb-2 flex items-center gap-2"><i data-lucide="refresh-cw" class="w-5 h-5 text-cyan-400"></i> Simular Novo Cronograma</h4>
-                        <p class="text-slate-400 text-xs md:text-sm mb-4 leading-relaxed">Gere um novo cronograma estruturado abaixo. Ao confirmar, ele substituirá o atual imediatamente.</p>
+                        `;
+                    } else {
+                        activeScheduleHtml = `
+                        <div class="text-center py-10 text-slate-400">
+                            <i data-lucide="calendar" class="w-10 h-10 mx-auto mb-3 opacity-50"></i>
+                            <p>O aluno ainda não gerou um cronograma.</p>
+                        </div>
                         `;
                     }
 
+                    draftHtml = activeScheduleHtml;
+
                     if (this.state.parsedBlocks) {
-                        draftHtml = activeScheduleHtml + `
-                        <div class="bg-slate-900/80 border border-violet-500/30 p-4 md:p-6 rounded-xl md:rounded-2xl animate-fade-in shadow-[0_0_30px_rgba(139,92,246,0.1)]">
+                        draftHtml += `
+                        <div class="bg-slate-900/80 border border-violet-500/30 p-4 md:p-6 rounded-xl md:rounded-2xl animate-fade-in shadow-[0_0_30px_rgba(139,92,246,0.1)] mt-6">
                             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/10 pb-4">
                                 <div>
                                     <h4 class="text-white font-bold text-lg">Revisão Final dos Blocos</h4>
@@ -1382,15 +1457,14 @@
 
                             <div class="flex flex-col md:flex-row gap-3 mt-6 pt-6 border-t border-white/10">
                                 <button onclick="window.App.state.parsedBlocks = null; window.App.render()" class="bg-slate-800 text-slate-300 px-6 py-3.5 rounded-xl font-bold hover:bg-slate-700 hover:text-white transition-colors text-sm md:text-base">Voltar para Edição</button>
-                                <button onclick="window.App.finalizeSchedule('${stu.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm md:text-base"><i data-lucide="check-circle" class="w-5 h-5"></i> Salvar e Enviar Cronograma ao Aluno</button>
+                                <button onclick="window.App.finalizeSchedule('${stu.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm md:text-base"><i data-lucide="check-circle" class="w-5 h-5"></i> Salvar e Aprovar Cronograma</button>
                             </div>
                         </div>
                         `;
-                    } else {
-                        draftHtml = activeScheduleHtml + `
-                        <div class="bg-slate-900/60 p-4 md:p-6 rounded-2xl border border-white/5 shadow-lg">
+                    } else if (stu.savedEditalForms && this.state.editalForms.length === 1 && this.state.editalForms[0].name === '' && (!stu.generatedSchedule || stu.generatedSchedule.length === 0)) {
+                        draftHtml += `
+                        <div class="bg-slate-900/60 p-4 md:p-6 rounded-2xl border border-white/5 shadow-lg mt-6">
                             
-                            <!-- SELEÇÃO DE META (Flexível vs Intensivo) -->
                             <div class="mb-8 border-b border-white/10 pb-6">
                                 <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="target" class="text-violet-400 w-5 h-5"></i> Definir Estratégia</h3>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
@@ -1436,7 +1510,7 @@
                                 <h3 class="text-white font-bold text-lg">Conteúdo Programático</h3>
                                 <button onclick="window.App.addEditalForm()" class="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-colors">+ Adicionar Disciplina</button>
                             </div>
-                            <p class="text-slate-400 text-xs md:text-sm mb-6 leading-relaxed">Adicione as disciplinas e cole o edital com a numeração (ex: 1 Assunto. 1.1 Detalhe).</p>
+                            <p class="text-slate-400 text-xs md:text-sm mb-6 leading-relaxed">Edite ou adicione as disciplinas e os tópicos.</p>
                             
                             <div class="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2 mb-6" id="edital-forms-list">
                                 ${this.state.editalForms.map((f, idx) => `
@@ -1455,33 +1529,11 @@
                         `;
                     }
 
-                    let totalHours = 0; let totalTasks = 0; let globalAcertos = 0; let globalTotal = 0;
-                    if(stu.generatedSchedule) {
-                        stu.generatedSchedule.forEach(t => {
-                            if(t.completed) { totalHours += (t.duration/60); totalTasks++; }
-                        });
-                    }
-                    if(stu.performance) {
-                        Object.values(stu.performance).forEach(p => { globalAcertos += p.correct; globalTotal += p.total; });
-                    }
-                    const globalPct = globalTotal > 0 ? Math.round((globalAcertos/globalTotal)*100) : 0;
-
-                    const perfHtml = Object.entries(stu.performance || {}).map(([subj, data]) => {
-                        const pct = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
-                        const c = pct >= 70 ? 'emerald' : pct >= 50 ? 'amber' : 'rose';
-                        return `
-                        <div class="bg-black/40 p-4 rounded-xl border border-white/5">
-                            <div class="flex justify-between items-center mb-2"><span class="text-white font-bold text-sm md:text-base">${subj}</span><span class="text-${c}-400 font-black">${pct}%</span></div>
-                            <div class="w-full bg-slate-800 rounded-full h-1.5 mb-2"><div class="bg-${c}-500 h-1.5 rounded-full" style="width: ${pct}%"></div></div>
-                            <p class="text-[10px] md:text-xs text-slate-400">${data.correct} acertos de ${data.total} questões</p>
-                        </div>`;
-                    }).join('') || '<p class="text-slate-400 text-xs md:text-sm col-span-2">O aluno ainda não resolveu questões do cronograma.</p>';
-
                     content = `
                     <div class="animate-fade-in pb-10">
                         <button onclick="window.App.selectStudent(null)" class="flex items-center gap-2 text-slate-300 hover:text-white mb-6 md:mb-8 bg-slate-900/60 px-4 md:px-5 py-2 md:py-2.5 rounded-full border border-white/10 font-bold text-xs md:text-sm transition-colors"><i data-lucide="arrow-left" class="w-4 h-4 md:w-5 md:h-5"></i> Voltar à Turma</button>
                         
-                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-3xl border-white/20 flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start relative bg-slate-900/80 shadow-2xl">
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border-white/20 flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start relative bg-slate-900/80 shadow-2xl">
                             <div class="absolute right-0 top-0 w-64 h-64 md:w-96 md:h-96 bg-fuchsia-600/20 blur-[80px] md:blur-[100px] rounded-full pointer-events-none"></div>
                             <div class="flex flex-col items-center gap-3 z-10">
                                 <div class="w-24 h-24 md:w-32 md:h-32 text-5xl md:text-8xl bg-slate-950/50 rounded-full border-2 md:border-4 border-white/10 flex items-center justify-center overflow-hidden">
@@ -1490,49 +1542,24 @@
                                 <span class="bg-slate-800 text-slate-300 text-[10px] md:text-xs px-3 py-1 rounded-full border border-white/10">${stu.age} anos</span>
                             </div>
                             <div class="flex-1 z-10 w-full text-center md:text-left">
-                                <h2 class="text-2xl md:text-4xl font-extrabold text-white mb-2">${(stu.name || 'Aluno').split(' ')[0]}</h2>
+                                <h2 class="text-2xl md:text-4xl font-extrabold text-white mb-2">${stu.name}</h2>
                                 <div class="flex flex-wrap justify-center md:justify-start gap-2 md:gap-3 items-center mt-2 md:mt-3">
                                     <span class="text-cyan-300 font-bold uppercase text-[10px] md:text-sm bg-cyan-900/40 px-2 md:px-3 py-1 rounded-md border border-cyan-500/30">🎯 ${stu.targetExam}</span>
                                     <span class="text-slate-400 text-[10px] md:text-sm flex items-center gap-1"><i data-lucide="mail" class="w-3 h-3 md:w-[14px]"></i> ${stu.email}</span>
-                                </div>
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 md:mt-8">
-                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">🧠</span><p class="text-xl md:text-3xl font-black text-white">${globalPct}%</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Aproveitamento</p></div>
-                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">🔥</span><p class="text-xl md:text-3xl font-black text-white">${stu.streak||0}</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Ofensiva (Dias)</p></div>
-                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">⏳</span><p class="text-xl md:text-3xl font-black text-white">${Math.round(totalHours)}h</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Foco Total</p></div>
-                                    <div class="bg-slate-950/70 p-3 md:p-5 rounded-xl md:rounded-2xl border border-white/10 text-center"><span class="text-2xl md:text-3xl mb-1 md:mb-2 block">✅</span><p class="text-xl md:text-3xl font-black text-white">${totalTasks}</p><p class="text-[9px] md:text-xs text-slate-400 uppercase mt-1 font-bold">Concluídas</p></div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- INTELIGÊNCIA DE CRONOGRAMA -->
-                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-3xl border-white/10 shadow-xl bg-slate-900/80 mt-6 md:mt-8">
+                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border-white/10 shadow-xl bg-slate-900/80 mt-6 md:mt-8">
                             <h3 class="text-lg md:text-2xl font-bold text-white mb-3 md:mb-4 flex items-center gap-2"><i data-lucide="brain-circuit" class="text-violet-400"></i> Gestor de Cronograma</h3>
                             ${draftHtml}
-                        </div>
-
-                        <!-- APROVEITAMENTO POR MATERIA -->
-                        <div class="glass-panel p-6 md:p-10 rounded-[2rem] md:rounded-3xl border-white/10 shadow-xl bg-slate-900/80 mt-6 md:mt-8">
-                            <h3 class="text-lg md:text-2xl font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="text-cyan-400"></i> Aproveitamento em Questões</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${perfHtml}</div>
-                        </div>
-
-                        <!-- CHAT COM ALUNO -->
-                        <div class="glass-panel rounded-[2rem] md:rounded-3xl border-white/10 bg-slate-900/80 shadow-xl mt-6 md:mt-8 flex flex-col h-[calc(100dvh-120px)] md:h-[500px] overflow-hidden relative">
-                            <div class="absolute top-0 left-0 w-1.5 md:w-2 h-full bg-gradient-to-b from-cyan-400 to-blue-600"></div>
-                            <div class="p-4 md:p-6 border-b border-white/10 bg-black/20 z-10 flex items-center gap-3"><i data-lucide="message-square" class="text-cyan-400 w-5 h-5 md:w-6 md:h-6"></i><h3 class="text-lg md:text-xl font-bold text-white">Chat com ${(stu.name || 'Aluno').split(' ')[0]}</h3></div>
-                            <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6 z-10 custom-scrollbar">${msgs}<div id="chat-end"></div></div>
-                            <div class="p-3 md:p-5 bg-slate-950/80 border-t border-white/10 z-10">
-                                <form onsubmit="window.App.sendMsg(event, 'mentor', '${stu.id}')" class="flex gap-2 md:gap-3 relative bg-slate-900/80 rounded-2xl p-1.5 md:p-2 border border-white/20">
-                                    <input type="text" id="chat-inp" placeholder="Envie orientação ou resposta..." class="flex-1 bg-transparent px-3 py-2 text-white outline-none font-medium text-sm md:text-base" />
-                                    <button type="submit" class="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-cyan-600 hover:bg-cyan-500 flex items-center justify-center text-white"><i data-lucide="send" class="w-4 h-4 md:w-5 md:h-5"></i></button>
-                                </form>
-                            </div>
                         </div>
                     </div>`;
                 } 
                 else if (this.state.activeTab === 'dashboard') {
                     const pendHtml = pendStudents.length === 0 ? '' : `
-                        <div class="glass-panel p-5 md:p-6 rounded-2xl md:rounded-3xl border-2 border-amber-500/60 shadow-[0_0_30px_rgba(245,158,11,0.2)] bg-slate-900/90 mb-6 md:mb-10 relative overflow-hidden">
+                        <div class="glass-panel p-5 md:p-6 rounded-2xl md:rounded-[3rem] border-2 border-amber-500/60 shadow-[0_0_30px_rgba(245,158,11,0.2)] bg-slate-900/90 mb-6 md:mb-10 relative overflow-hidden">
                             <div class="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-amber-500/10 blur-2xl md:blur-3xl rounded-full"></div>
                             <div class="flex items-center gap-3 mb-4 md:mb-6 relative z-10"><div class="p-2 md:p-3 bg-amber-500/20 rounded-lg md:rounded-xl text-amber-400"><i data-lucide="users" class="w-5 h-5 md:w-6 md:h-6"></i></div><h2 class="text-lg md:text-2xl font-bold text-white">Solicitações Pendentes</h2></div>
                             <div class="space-y-3 md:space-y-4 relative z-10">
@@ -1555,7 +1582,7 @@
                         </div>`;
                     
                     const actHtml = actStudents.map(s => `
-                        <div onclick="window.App.selectStudent('${s.id}')" class="glass-panel p-4 md:p-6 rounded-2xl md:rounded-3xl border-white/10 bg-slate-900/70 flex gap-4 md:gap-6 shadow-lg cursor-pointer hover:border-violet-500/50 transition-colors">
+                        <div onclick="window.App.selectStudent('${s.id}')" class="glass-panel p-4 md:p-6 rounded-2xl md:rounded-[3rem] border-white/10 bg-slate-900/70 flex gap-4 md:gap-6 shadow-lg cursor-pointer hover:border-violet-500/50 transition-colors">
                             <div class="text-3xl md:text-5xl bg-slate-800 w-14 h-14 md:w-20 md:h-20 rounded-full flex items-center justify-center border-2 border-white/20 shadow-inner overflow-hidden flex-shrink-0">${s.avatarUrl?`<img src="${s.avatarUrl}" class="w-full h-full object-cover"/>`:s.avatar||'🧑‍🎓'}</div>
                             <div class="flex-1">
                                 <h3 class="text-lg md:text-xl font-extrabold text-white mb-1">${s.name}</h3>
@@ -1570,7 +1597,7 @@
 
                     content = `
                     <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60"><h1 class="text-2xl md:text-4xl font-extrabold text-white mb-2 md:mb-3">Painel de Controle 📡</h1><p class="text-slate-300 text-sm md:text-lg">Acompanhe a sua turma de elite.</p></div>
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60"><h1 class="text-2xl md:text-4xl font-extrabold text-white mb-2 md:mb-3">Painel de Controle 📡</h1><p class="text-slate-300 text-sm md:text-lg">Acompanhe a sua turma de elite.</p></div>
                         ${pendHtml}
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">${actHtml}</div>
                     </div>`;
@@ -1579,10 +1606,15 @@
                     const eid = this.state.editingClassId;
                     const cdel = this.state.confirmDeleteClassId;
                     
-                    const clsHtml = this.state.classes.map(c => `
+                    const clsHtml = this.state.classes.map(c => {
+                        const sName = this.state.students.find(s => s.id === c.studentId)?.name || 'Todos os Alunos';
+                        return `
                         <div class="flex flex-col md:flex-row items-center justify-between p-4 md:p-5 bg-black/40 border border-white/5 rounded-xl md:rounded-2xl gap-3 md:gap-4 hover:border-violet-500/30 group">
                             <div class="w-full md:w-auto">
-                                <span class="text-[9px] md:text-[10px] text-emerald-300 font-bold uppercase tracking-wider bg-emerald-900/30 px-2 py-1 rounded mb-1 md:mb-2 flex items-center gap-1 w-fit border border-emerald-500/30"><i data-lucide="check-circle-2" class="w-3 h-3"></i> ${this.formatDateBR(c.date)}</span>
+                                <div class="flex gap-2 mb-1 md:mb-2">
+                                    <span class="text-[9px] md:text-[10px] text-emerald-300 font-bold uppercase tracking-wider bg-emerald-900/30 px-2 py-1 rounded flex items-center gap-1 w-fit border border-emerald-500/30"><i data-lucide="calendar" class="w-3 h-3"></i> ${this.formatDateBR(c.date)}</span>
+                                    <span class="text-[9px] md:text-[10px] text-cyan-300 font-bold uppercase tracking-wider bg-cyan-900/30 px-2 py-1 rounded flex items-center gap-1 w-fit border border-cyan-500/30"><i data-lucide="user" class="w-3 h-3"></i> ${sName}</span>
+                                </div>
                                 <h3 class="font-bold text-white text-base md:text-lg leading-tight">${c.title}</h3><p class="text-slate-400 text-xs md:text-sm mt-0.5">${c.subject}</p>
                             </div>
                             <div class="flex gap-2 w-full md:w-auto mt-2 md:mt-0 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1595,22 +1627,29 @@
                                 `}
                             </div>
                         </div>
-                    `).join('') || '<p class="text-slate-400 text-sm">Nenhuma aula registrada.</p>';
+                    `}).join('') || '<p class="text-slate-400 text-sm">Nenhuma aula registrada.</p>';
 
                     content = `
                     <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex gap-3 md:gap-4 items-center"><div class="p-3 md:p-4 bg-violet-500/20 rounded-xl md:rounded-2xl text-violet-400 border border-violet-500/30"><i data-lucide="calendar-plus" class="w-6 h-6 md:w-9 md:h-9"></i></div><div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Aulas</h1><p class="text-slate-300 text-xs md:text-sm">Gerencie os encontros da mentoria.</p></div></div>
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60 flex gap-3 md:gap-4 items-center"><div class="p-3 md:p-4 bg-violet-500/20 rounded-xl md:rounded-2xl text-violet-400 border border-violet-500/30"><i data-lucide="calendar-plus" class="w-6 h-6 md:w-9 md:h-9"></i></div><div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Aulas</h1><p class="text-slate-300 text-xs md:text-sm">Gerencie os encontros da mentoria.</p></div></div>
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-                            <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border border-violet-500/30 bg-slate-900/80 h-fit">
+                            <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border border-violet-500/30 bg-slate-900/80 h-fit">
                                 <h2 class="text-lg md:text-xl font-bold text-white mb-4 md:mb-6 flex justify-between items-center">${eid?'Editar Aula':'Nova Aula'} ${eid?`<button type="button" onclick="window.App.state.editingClassId=null; document.getElementById('cls-form').reset(); window.App.render()" class="text-[10px] md:text-xs text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20 hover:bg-rose-500/20">Cancelar</button>`:''}</h2>
                                 <form id="cls-form" onsubmit="window.App.saveClass(event)" class="space-y-3 md:space-y-4">
                                     <div><label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Título</label><input id="cls-title" required type="text" class="w-full glass-input rounded-lg md:rounded-xl py-2 md:py-3 px-3 md:px-4 text-sm" /></div>
                                     <div><label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Disciplina</label><input id="cls-subj" required type="text" class="w-full glass-input rounded-lg md:rounded-xl py-2 md:py-3 px-3 md:px-4 text-sm" /></div>
                                     <div><label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Data</label><input id="cls-date" required type="date" class="w-full glass-input rounded-lg md:rounded-xl py-2 md:py-3 px-3 md:px-4 text-sm" /></div>
+                                    <div>
+                                        <label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Aluno Específico</label>
+                                        <select id="cls-studentId" required class="w-full glass-input rounded-lg md:rounded-xl py-2 md:py-3 px-3 md:px-4 text-sm text-slate-400">
+                                            <option value="">Selecione o aluno...</option>
+                                            ${actStudents.map(s => `<option value="${s.id}" ${eid && this.state.classes.find(c=>c.id===eid)?.studentId === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
+                                        </select>
+                                    </div>
                                     <button id="btn-save-class" type="submit" class="w-full py-3 md:py-3.5 mt-2 md:mt-4 rounded-lg md:rounded-xl text-white font-bold text-sm md:text-base flex justify-center ${eid?'bg-amber-600':'bg-gradient-to-r from-violet-600 to-fuchsia-600'}">${eid?'Atualizar Aula':'Registrar Aula'}</button>
                                 </form>
                             </div>
-                            <div class="lg:col-span-2 glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 bg-slate-900/60"><h2 class="text-lg md:text-xl font-bold text-white mb-4 md:mb-6 flex items-center gap-2"><i data-lucide="book-open" class="text-emerald-400 w-5 h-5"></i> Histórico</h2><div class="space-y-3 md:space-y-4">${clsHtml}</div></div>
+                            <div class="lg:col-span-2 glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 bg-slate-900/60"><h2 class="text-lg md:text-xl font-bold text-white mb-4 md:mb-6 flex items-center gap-2"><i data-lucide="book-open" class="text-emerald-400 w-5 h-5"></i> Histórico</h2><div class="space-y-3 md:space-y-4">${clsHtml}</div></div>
                         </div>
                     </div>`;
                 }
@@ -1631,7 +1670,7 @@
             getStudentHtml: function() {
                 const u = this.state.userData;
                 const tab = this.state.activeTab;
-                const uAvatar = u.avatarUrl || '🧑‍🎓';
+                const safeName = (u.name || 'Aluno').split(' ')[0];
 
                 const navItems = [
                     { id: 'dashboard', label: 'Meu Painel', icon: 'layout-dashboard' },
@@ -1646,10 +1685,10 @@
                         <button class="md:hidden absolute top-4 right-4 text-slate-300 hover:text-white" onclick="window.App.toggleMenu()"><i data-lucide="x" class="w-5 h-5"></i></button>
                         <div class="w-20 h-20 md:w-24 md:h-24 mx-auto rounded-full overflow-hidden border-2 md:border-4 border-violet-500 shadow-[0_0_30px_rgba(139,92,246,0.5)] mb-3 md:mb-4 mt-6 md:mt-4 relative group cursor-pointer" onclick="document.getElementById('stu-avatar-upload').click()">
                             <input type="file" id="stu-avatar-upload" onchange="window.App.uploadAvatar(this, 'student')" accept="image/*" class="hidden" />
-                            ${u.avatarUrl ? `<img src="${u.avatarUrl}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />` : `<div class="w-full h-full bg-slate-800 flex items-center justify-center text-4xl">${uAvatar}</div>`}
+                            ${u.avatarUrl ? `<img src="${u.avatarUrl}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />` : `<img src="${studentImage}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />`}
                             <div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100"><i data-lucide="upload-cloud" class="text-white mb-1 w-5 h-5"></i><span class="text-[9px] text-white font-bold uppercase">Foto</span></div>
                         </div>
-                        <h2 class="font-extrabold text-white text-lg md:text-xl">${(u.name || 'Aluno').split(' ')[0]}</h2>
+                        <h2 class="font-extrabold text-white text-lg md:text-xl">${safeName}</h2>
                         <p class="text-violet-300 text-[9px] md:text-[10px] font-black uppercase tracking-widest mt-1 bg-violet-900/40 py-1 rounded-full border border-violet-500/30 inline-block px-3">Portal do Aluno</p>
                     </div>
                     <nav class="p-3 md:p-4 space-y-2 md:space-y-3 flex-1">
@@ -1670,12 +1709,29 @@
                     const todayStr = (new Date(today.getTime() - offset)).toISOString().split('T')[0];
 
                     const scheduleToday = (u.generatedSchedule || []).filter(t => t.date === todayStr);
-                    const scheduleHtml = scheduleToday.length > 0 ? scheduleToday.map(t => this._renderTaskRow(t)).join('') : '<p class="text-slate-400 text-sm">Nenhuma tarefa programada para hoje. Aproveite o descanso!</p>';
+                    
+                    let scheduleHtml = '';
+                    if(u.scheduleStatus === 'pending' && u.generatedSchedule && u.generatedSchedule.length > 0) {
+                        scheduleHtml = `<div class="bg-amber-500/20 p-4 rounded-xl border border-amber-500/30 text-amber-300 text-sm font-bold text-center"><i data-lucide="clock" class="inline w-5 h-5 mb-1"></i><br/>Seu cronograma está em análise pela mentora. Aguarde a aprovação para iniciar as missões!</div>`;
+                    } else if (!u.generatedSchedule || u.generatedSchedule.length === 0) {
+                        scheduleHtml = '<p class="text-slate-400 text-sm">Nenhum cronograma ativo. Acesse a aba Cronograma para gerar o seu!</p>';
+                    } else {
+                        scheduleHtml = scheduleToday.length > 0 ? scheduleToday.map(t => this._renderTaskRow(t)).join('') : '<p class="text-slate-400 text-sm">Nenhuma tarefa programada para hoje. Aproveite o descanso!</p>';
+                    }
+
+                    const myClasses = this.state.classes.filter(c => c.studentId === u.id);
+                    const myClassesHtml = myClasses.map(c => `
+                        <div class="bg-black/40 p-3 rounded-xl border border-cyan-500/20 mb-2 hover:border-cyan-500/50 transition-colors">
+                            <span class="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30 uppercase flex w-fit items-center gap-1 mb-1"><i data-lucide="calendar" class="w-3 h-3"></i> ${this.formatDateBR(c.date)}</span>
+                            <p class="text-white text-sm md:text-base font-bold">${c.title}</p>
+                            <p class="text-xs text-slate-400 mt-0.5">${c.subject}</p>
+                        </div>
+                    `).join('') || '<p class="text-slate-400 text-xs md:text-sm">Nenhuma aula agendada para você ainda.</p>';
 
                     let totalHours = 0; let totalTasks = 0; let globalAcertos = 0; let globalTotal = 0;
                     if(u.generatedSchedule) {
                         u.generatedSchedule.forEach(t => {
-                            if(t.completed) { totalHours += (t.duration/60); totalTasks++; }
+                            if(t.completed) { totalHours += ((t.duration || 60)/60); totalTasks++; }
                         });
                     }
                     if(u.performance) {
@@ -1715,9 +1771,9 @@
 
                     content = `
                     <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
                             <div>
-                                <h1 class="text-2xl md:text-4xl font-extrabold text-white mb-1 md:mb-2">Olá, ${(u.name || 'Aluno').split(' ')[0]}! 🚀</h1>
+                                <h1 class="text-2xl md:text-4xl font-extrabold text-white mb-1 md:mb-2">Olá, ${safeName}! 🚀</h1>
                                 <p class="text-slate-300 text-sm md:text-base">Seu foco atual: <strong class="text-cyan-400">${u.targetExam}</strong></p>
                             </div>
                             <div class="flex gap-4">
@@ -1726,28 +1782,191 @@
                             </div>
                         </div>
                         
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60">
-                            <div class="flex justify-between items-center mb-6">
-                                <h2 class="text-lg md:text-xl font-bold text-white flex items-center gap-2"><i data-lucide="target" class="text-violet-400 w-5 h-5"></i> Missões de Hoje</h2>
-                                <button onclick="window.App.setTab('schedule')" class="text-violet-400 hover:text-white text-xs md:text-sm font-bold">Ver Tudo</button>
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+                            <div class="lg:col-span-2 glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60">
+                                <div class="flex justify-between items-center mb-6">
+                                    <h2 class="text-lg md:text-xl font-bold text-white flex items-center gap-2"><i data-lucide="target" class="text-violet-400 w-5 h-5"></i> Missões de Hoje</h2>
+                                    <button onclick="window.App.setTab('schedule')" class="text-violet-400 hover:text-white text-xs md:text-sm font-bold">Ver Tudo</button>
+                                </div>
+                                <div class="space-y-3">${scheduleHtml}</div>
                             </div>
-                            <div class="space-y-3">${scheduleHtml}</div>
+                            
+                            <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60 h-fit">
+                                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="video" class="text-cyan-400 w-5 h-5"></i> Registros de Aulas</h2>
+                                <div class="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                                    ${myClassesHtml}
+                                </div>
+                            </div>
                         </div>
 
                         ${studentChatHtml}
                     </div>`;
                 } else if (tab === 'schedule') {
-                    const sched = u.generatedSchedule || [];
-                    const schedHtml = sched.length > 0 ? sched.map(t => this._renderTaskRow(t)).join('') : '<p class="text-slate-400 text-sm text-center py-10">Nenhum cronograma gerado ainda. Aguarde a mentora.</p>';
-                    
-                    content = `
-                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex justify-between items-center">
-                            <div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Cronograma</h1><p class="text-slate-300 text-xs md:text-sm">Suas tarefas organizadas pela mentora.</p></div>
+                    let draftHtml = '';
+                    let activeScheduleHtml = '';
+
+                    if (u.generatedSchedule && u.generatedSchedule.length > 0) {
+                        
+                        let deleteBtnHtml = '';
+                        if (this.state.confirmDeleteId === u.id) {
+                            deleteBtnHtml = `
+                            <div class="flex items-center gap-2 animate-fade-in bg-rose-950/80 p-1.5 md:p-2 rounded-xl border border-rose-500/50">
+                                <span class="text-white text-[10px] md:text-xs font-bold px-2 hidden sm:inline">Excluir tudo?</span>
+                                <button onclick="window.App.deleteStudentSchedule('${u.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 md:px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-[0_0_10px_rgba(225,29,72,0.4)] flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 md:w-4 md:h-4"></i> Sim</button>
+                                <button onclick="window.App.state.confirmDeleteId = null; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors"><i data-lucide="x" class="w-3 h-3 md:w-4 md:h-4"></i></button>
+                            </div>`;
+                        } else {
+                            deleteBtnHtml = `
+                            <div class="flex gap-2 w-full md:w-auto">
+                                <button onclick="window.App.editStudentSchedule('${u.id}')" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(37,99,235,0.4)]">
+                                    <i data-lucide="edit" class="w-4 h-4"></i> Editar
+                                </button>
+                                <button onclick="window.App.state.confirmDeleteId = '${u.id}'; window.App.render();" class="flex-1 md:flex-none bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(225,29,72,0.4)]">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i> Excluir
+                                </button>
+                            </div>`;
+                        }
+
+                        let pendingWarning = u.scheduleStatus === 'pending' ? `
+                        <div class="bg-amber-500/20 border border-amber-500/50 p-4 rounded-xl mb-4 flex justify-between items-center">
+                            <div><h4 class="text-amber-400 font-bold text-sm md:text-base"><i data-lucide="clock" class="w-5 h-5 inline mb-1"></i> Cronograma Pendente</h4><p class="text-xs text-amber-200">Sua mentora precisa aprovar este cronograma para liberar suas missões.</p></div>
+                        </div>
+                        ` : '';
+
+                        activeScheduleHtml = `
+                        ${pendingWarning}
+                        <div class="bg-emerald-900/20 border border-emerald-500/30 p-4 md:p-5 rounded-xl md:rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                            <div class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-emerald-400"></i><span class="text-emerald-300 font-bold text-sm md:text-base">Cronograma ${u.scheduleStatus === 'pending' ? 'em Análise' : 'Ativo'}</span></div>
+                            ${deleteBtnHtml}
+                        </div>
+                        <div class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2 mt-4 bg-black/20 p-2 rounded-xl border border-white/5">
+                            ${u.generatedSchedule.map(t => {
+                                const color = t.type==='teoria' ? 'violet' : t.type==='revisao' ? 'amber' : 'emerald';
+                                const cleanTopic = String(t.topic || '').replace(/\(1h de.*?\)/gi, '').trim();
+                                return `
+                                <div class="bg-black/40 p-3 rounded-xl border border-white/5 flex gap-3">
+                                    <div class="bg-${color}-500/20 p-2 rounded-lg h-fit border border-${color}-500/30"><i data-lucide="book-open" class="text-${color}-400 w-4 h-4"></i></div>
+                                    <div>
+                                        <span class="text-[10px] text-${color}-400 font-bold uppercase tracking-wider">${this.formatDateBR(t.date)}</span>
+                                        <p class="text-white text-xs md:text-sm font-medium mt-1 leading-relaxed">${cleanTopic}</p>
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                        <div class="mt-6 flex justify-end">
                             <button onclick="window.App.readjustSchedule(event)" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 shadow-lg"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Reajustar Atrasos</button>
                         </div>
-                        <div class="glass-panel p-4 md:p-6 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 space-y-3 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                            ${schedHtml}
+                        `;
+
+                        draftHtml = activeScheduleHtml;
+
+                    } else {
+                        if (this.state.parsedBlocks) {
+                            draftHtml = `
+                            <div class="bg-slate-900/80 border border-violet-500/30 p-4 md:p-6 rounded-xl md:rounded-2xl animate-fade-in shadow-[0_0_30px_rgba(139,92,246,0.1)]">
+                                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/10 pb-4">
+                                    <div>
+                                        <h4 class="text-white font-bold text-lg">Revisão Final dos Blocos</h4>
+                                        <p class="text-slate-400 text-xs mt-1">Aqui estão os tópicos divididos. Você pode editá-los antes de enviar para aprovação da mentora.</p>
+                                    </div>
+                                    <button onclick="window.App.addNewBlock()" class="bg-violet-600 hover:bg-violet-500 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white transition-colors shadow-lg flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4"></i> Inserir Bloco Adicional</button>
+                                </div>
+
+                                <div class="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2" id="blocks-editor-list">
+                                    ${this.state.parsedBlocks.map((b, i) => `
+                                        <div class="bg-slate-800/80 border border-slate-600 rounded-xl p-4 flex flex-col gap-3 relative shadow-md hover:border-violet-500 transition-colors">
+                                            <div class="flex justify-between items-center">
+                                                <input type="text" class="w-2/3 bg-transparent border-b border-slate-500 focus:border-cyan-400 py-1 text-sm font-bold text-cyan-300 uppercase outline-none transition-colors" value="${b.discipline}" onchange="window.App.updateParsedBlock('${b.id}', 'discipline', this.value)"/>
+                                                <button onclick="window.App.removeParsedBlock('${b.id}')" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/20 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                            </div>
+                                            <textarea class="w-full bg-slate-900 border border-slate-700 text-slate-200 p-3 rounded-lg text-sm leading-relaxed custom-scrollbar h-24 outline-none focus:border-violet-500 transition-colors" onchange="window.App.updateParsedBlock('${b.id}', 'content', this.value)">${b.content}</textarea>
+                                        </div>
+                                    `).join('')}
+                                </div>
+
+                                <div class="flex flex-col md:flex-row gap-3 mt-6 pt-6 border-t border-white/10">
+                                    <button onclick="window.App.state.parsedBlocks = null; window.App.render()" class="bg-slate-800 text-slate-300 px-6 py-3.5 rounded-xl font-bold hover:bg-slate-700 hover:text-white transition-colors text-sm md:text-base">Voltar para Edição</button>
+                                    <button onclick="window.App.finalizeSchedule('${u.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm md:text-base"><i data-lucide="send" class="w-5 h-5"></i> Enviar para Aprovação</button>
+                                </div>
+                            </div>
+                            `;
+                        } else {
+                            draftHtml = `
+                            <div class="bg-slate-900/60 p-4 md:p-6 rounded-2xl border border-white/5 shadow-lg">
+                                
+                                <div class="mb-8 border-b border-white/10 pb-6">
+                                    <h3 class="text-white font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="target" class="text-violet-400 w-5 h-5"></i> Definir Estratégia</h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                                        <label class="block cursor-pointer relative">
+                                            <input type="radio" name="study-mode" value="flex" class="peer sr-only radio-card" ${this.state.scheduleMode === 'flex' ? 'checked' : ''} onchange="window.App.setScheduleMode('flex')">
+                                            <div class="p-4 rounded-xl border border-white/10 bg-black/40 transition-all hover:bg-white/5">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="text-2xl">🐢</span>
+                                                    <div>
+                                                        <h3 class="font-bold text-white text-sm md:text-base">No próprio ritmo (Flexível)</h3>
+                                                        <p class="text-[10px] md:text-xs text-slate-400 mt-1 font-medium">Divide os tópicos (máx 3 sub) e agenda revisões automáticas (Repetição Espaçada).</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </label>
+
+                                        <label class="block cursor-pointer relative">
+                                            <input type="radio" name="study-mode" value="intensive" class="peer sr-only radio-card" ${this.state.scheduleMode === 'intensive' ? 'checked' : ''} onchange="window.App.setScheduleMode('intensive')">
+                                            <div class="p-4 rounded-xl border border-white/10 bg-black/40 transition-all hover:bg-white/5">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="text-2xl">🚀</span>
+                                                    <div>
+                                                        <h3 class="font-bold text-white text-sm md:text-base">Modo Intensivo (Pós-Edital)</h3>
+                                                        <p class="text-[10px] md:text-xs text-slate-400 mt-1 font-medium">Comprime os tópicos para caber nas horas disponíveis até a data da prova.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="text-[10px] md:text-xs text-slate-400 font-bold uppercase block mb-1">Início dos Estudos</label>
+                                            <input type="date" value="${this.state.scheduleStartDate}" onchange="window.App.setScheduleDate('scheduleStartDate', this.value)" class="w-full glass-input rounded-xl py-2 px-3 text-sm font-bold text-slate-200" required>
+                                        </div>
+                                        <div class="transition-opacity ${this.state.scheduleMode === 'intensive' ? 'opacity-100' : 'opacity-30 pointer-events-none'}">
+                                            <label class="text-[10px] md:text-xs text-rose-400 font-bold uppercase block mb-1">Data da Prova (Fim)</label>
+                                            <input type="date" value="${this.state.scheduleEndDate}" onchange="window.App.setScheduleDate('scheduleEndDate', this.value)" class="w-full glass-input rounded-xl py-2 px-3 text-sm font-bold text-rose-300" ${this.state.scheduleMode === 'intensive' ? 'required' : ''}>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-white font-bold text-lg">Conteúdo Programático</h3>
+                                    <button onclick="window.App.addEditalForm()" class="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-colors">+ Adicionar Disciplina</button>
+                                </div>
+                                <p class="text-slate-400 text-xs md:text-sm mb-6 leading-relaxed">Edite ou adicione as disciplinas e os tópicos.</p>
+                                
+                                <div class="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2 mb-6" id="edital-forms-list">
+                                    ${this.state.editalForms.map((f, idx) => `
+                                        <div class="bg-black/40 border border-white/10 rounded-xl p-4 relative group animate-fade-in">
+                                            ${this.state.editalForms.length > 1 ? `<button type="button" onclick="window.App.removeEditalForm(${f.id})" class="absolute top-4 right-4 text-rose-500 hover:bg-rose-500/20 p-1.5 rounded-md transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                                            <input type="text" class="w-full md:w-3/4 bg-transparent border-b border-slate-600 focus:border-cyan-400 text-cyan-300 font-bold uppercase text-sm md:text-base py-1 outline-none mb-3 transition-colors placeholder-slate-600" placeholder="DISCIPLINA (Ex: CONSTITUCIONAL)" value="${f.name}" onchange="window.App.updateEditalForm(${f.id}, 'name', this.value)"/>
+                                            <textarea class="w-full glass-input rounded-xl p-3 text-sm h-32 custom-scrollbar leading-relaxed outline-none focus:border-violet-500 transition-colors placeholder-slate-500" placeholder="1 Direitos Básicos.\n1.1 Vida.\n1.2 Liberdade.\n1.3 Igualdade.\n1.4 Segurança..." onchange="window.App.updateEditalForm(${f.id}, 'content', this.value)">${f.content}</textarea>
+                                        </div>
+                                    `).join('')}
+                                </div>
+
+                                <div class="flex gap-2">
+                                    <button onclick="window.App.processEditalForms()" class="flex-1 py-4 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold text-sm md:text-base transition-colors shadow-[0_0_15px_rgba(139,92,246,0.4)] flex justify-center items-center gap-2"><i data-lucide="sparkles" class="w-5 h-5"></i> Gerar Cronograma</button>
+                                </div>
+                            </div>
+                            `;
+                        }
+                    }
+
+                    content = `
+                    <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60 flex justify-between items-center">
+                            <div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Meu Cronograma</h1><p class="text-slate-300 text-xs md:text-sm">Gere e envie seu cronograma para aprovação da mentora.</p></div>
+                        </div>
+                        
+                        <div class="glass-panel p-4 md:p-6 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60">
+                            ${draftHtml}
                         </div>
                     </div>`;
                 } else if (tab === 'flashcards') {
@@ -1793,12 +2012,12 @@
 
                     content = `
                     <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60 flex justify-between items-center">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60 flex justify-between items-center">
                             <div><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Revisão Espaçada</h1><p class="text-slate-300 text-xs md:text-sm">Fixe o conteúdo usando SRS.</p></div>
                             <div class="text-right"><span class="block text-2xl font-black text-cyan-400">${cards.length}</span><span class="text-[10px] text-slate-400 uppercase font-bold">Total na Base</span></div>
                         </div>
                         
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60">
                             ${srsHtml}
                         </div>
 
@@ -1834,9 +2053,9 @@
 
                     content = `
                     <div class="space-y-6 md:space-y-8 animate-fade-in pb-10">
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60"><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Meu Perfil</h1><p class="text-slate-300 text-xs md:text-sm">Gerencie suas configurações de estudo.</p></div>
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60"><h1 class="text-2xl md:text-3xl font-extrabold text-white mb-1">Meu Perfil</h1><p class="text-slate-300 text-xs md:text-sm">Gerencie suas configurações de estudo.</p></div>
                         
-                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-3xl border-white/10 shadow-lg bg-slate-900/60">
+                        <div class="glass-panel p-6 md:p-8 rounded-2xl md:rounded-[3rem] border-white/10 shadow-lg bg-slate-900/60">
                             <h2 class="text-lg md:text-xl font-bold text-white mb-4"><i data-lucide="clock" class="inline w-5 h-5 text-violet-400 mr-2"></i> Ajustar Horas Disponíveis</h2>
                             <div class="p-4 bg-slate-950/50 rounded-2xl border border-white/5 mb-6">
                                 <div class="flex flex-wrap justify-center gap-2">${schedHtml}</div>
@@ -1860,18 +2079,31 @@
             },
 
             _renderTaskRow: function(t) {
+                if (!t) return '';
+                const u = this.state.userData;
+
                 const isCompleted = t.completed;
                 const isQuestions = t.type === 'questoes';
                 const color = t.type === 'teoria' ? 'violet' : t.type === 'revisao' ? 'amber' : 'emerald';
                 const bgClass = isCompleted ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-slate-800/80 border-slate-600';
                 const opacity = isCompleted ? 'opacity-70' : 'opacity-100';
 
+                let isPendingApproval = false;
+                if (u && u.role === 'student' && u.scheduleStatus === 'pending') {
+                    isPendingApproval = true;
+                } else if (this.state.selectedStudentId && this.state.students) {
+                    const s = this.state.students.find(x => x.id === this.state.selectedStudentId);
+                    isPendingApproval = s && s.scheduleStatus === 'pending';
+                }
+
                 const isCurrentTaskTimer = this.state.activeTimerId === t.id;
                 const isTimerRunning = isCurrentTaskTimer && this.state.timerIntervalObj !== null;
                 const isTimerPaused = isCurrentTaskTimer && this.state.timerIntervalObj === null && this.state.activeTimerSeconds > 0;
 
                 let timerHtml = '';
-                if (isTimerRunning) {
+                if (isPendingApproval) {
+                    timerHtml = `<span class="text-xs font-bold text-amber-500 bg-amber-500/10 px-2 py-1.5 rounded-md border border-amber-500/30 flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Bloqueado</span>`;
+                } else if (isTimerRunning) {
                     timerHtml = `
                         <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
                             <i data-lucide="clock" class="w-4 h-4 text-cyan-400 animate-pulse"></i>
@@ -1883,17 +2115,17 @@
                     timerHtml = `
                         <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-amber-500/50">
                             <span class="text-amber-400 font-mono font-bold text-sm tracking-wider" id="timer-display-${t.id}">${this.formatTimer(this.state.activeTimerSeconds)}</span>
-                            <button onclick="window.App.startTimer('${t.id}', ${t.duration})" class="text-emerald-400 hover:text-emerald-300 p-1.5 bg-emerald-400/10 rounded-md transition-colors font-bold text-xs flex items-center gap-1" title="Continuar"><i data-lucide="play" class="w-3 h-3"></i> Continuar</button>
+                            <button onclick="window.App.startTimer('${t.id}', ${t.duration || 60})" class="text-emerald-400 hover:text-emerald-300 p-1.5 bg-emerald-400/10 rounded-md transition-colors font-bold text-xs flex items-center gap-1" title="Continuar"><i data-lucide="play" class="w-3 h-3"></i> Continuar</button>
                         </div>
                     `;
                 } else if (!isCompleted) {
                     timerHtml = `
-                        <button onclick="window.App.startTimer('${t.id}', ${t.duration})" class="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-[0_0_10px_rgba(139,92,246,0.3)] transition-colors"><i data-lucide="play" class="w-4 h-4"></i> Iniciar estudo</button>
+                        <button onclick="window.App.startTimer('${t.id}', ${t.duration || 60})" class="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-[0_0_10px_rgba(139,92,246,0.3)] transition-colors"><i data-lucide="play" class="w-4 h-4"></i> Iniciar estudo</button>
                     `;
                 }
 
                 let questionsInputHtml = '';
-                if (isQuestions && this.state.activeTaskInputId === t.id && !isCompleted) {
+                if (isQuestions && this.state.activeTaskInputId === t.id && !isCompleted && !isPendingApproval) {
                     questionsInputHtml = `
                     <div class="mt-3 bg-black/40 p-3 rounded-xl border border-white/10 animate-fade-in flex flex-col md:flex-row gap-2 items-center">
                         <input type="number" id="q-tot-${t.id}" placeholder="Total Resolvidas" class="glass-input text-xs p-2 rounded w-full md:w-32 text-center" />
@@ -1932,14 +2164,14 @@
                 <div class="p-4 md:p-5 rounded-xl border ${bgClass} ${opacity} transition-all relative group shadow-md hover:shadow-lg hover:border-${color}-500/50 mb-3">
                     <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                         <div class="flex items-start gap-3 w-full md:w-auto">
-                            <button onclick="window.App.toggleStudentTask('${t.id}')" class="mt-1.5 w-6 h-6 rounded-full border-2 ${isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500 hover:border-violet-400'} flex items-center justify-center flex-shrink-0 transition-colors">
+                            <button ${isPendingApproval ? 'disabled' : `onclick="window.App.toggleStudentTask('${t.id}')"`} class="mt-1.5 w-6 h-6 rounded-full border-2 ${isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500 hover:border-violet-400'} flex items-center justify-center flex-shrink-0 transition-colors ${isPendingApproval ? 'opacity-50 cursor-not-allowed' : ''}">
                                 ${isCompleted ? '<i data-lucide="check" class="text-white w-4 h-4"></i>' : ''}
                             </button>
                             <div class="flex-1">
                                 <div class="flex flex-wrap items-center gap-2 mb-1.5">
                                     <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-${color}-400 bg-${color}-500/10 px-2 py-0.5 rounded border border-${color}-500/20">${this.formatDateBR(t.date)}</span>
                                     <span class="text-[10px] md:text-xs font-black text-${color}-200 bg-${color}-600/30 px-2 py-0.5 rounded-md border border-${color}-500/40 flex items-center gap-1"><i data-lucide="${iconTask}" class="w-3 h-3"></i> ${ludicLabel}</span>
-                                    <span class="text-[10px] md:text-xs text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1"><i data-lucide="hourglass" class="w-3 h-3"></i> ${t.duration} min</span>
+                                    <span class="text-[10px] md:text-xs text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1"><i data-lucide="hourglass" class="w-3 h-3"></i> ${t.duration || 60} min</span>
                                     ${isQuestions && isCompleted ? `<span class="text-[10px] md:text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">${t.qCorrect}/${t.qTotal} Acertos</span>` : ''}
                                 </div>
                                 <p class="text-white text-sm md:text-base font-bold leading-snug ${isCompleted ? 'line-through text-slate-500' : ''}">${cleanTopic}</p>
