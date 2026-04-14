@@ -365,7 +365,7 @@
             },
 
             // -------------------------------------------------------------------------
-            // LOGIN E AUTENTICAÇÃO (CÓDIGO ORIGINAL BLINDADO)
+            // LOGIN E AUTENTICAÇÃO
             // -------------------------------------------------------------------------
             loginStudent: async function(e) {
                 e.preventDefault();
@@ -391,7 +391,7 @@
                                 name: "Aluno(a)", email: em, age: 18, targetExam: "Definir", 
                                 schedule: { seg: 4, ter: 4, qua: 4, qui: 4, sex: 4, sab: 6, dom: 0 },
                                 role: 'student', status: 'pending', retention: 0, streak: 0, hours: 0, tasksDone: 0,
-                                avatarUrl: null, mentorMessages: [], performance: {}, generatedSchedule: [], flashcards: [], dailyCardLimit: 10, rawEdital: '', createdAt: new Date().toISOString()
+                                avatarUrl: null, mentorMessages: [], performance: {}, generatedSchedule: [], flashcards: [], dailyCardLimit: 10, rawEdital: '', studyHistory: [], createdAt: new Date().toISOString()
                             });
                         }
                     } catch(ex){}
@@ -428,7 +428,7 @@
                     await setDoc(doc(db, 'users', cred.user.uid), {
                         name: nm, email: em, age: Number(ag), targetExam: ex, schedule: this.state.schedule,
                         role: 'student', status: 'pending', retention: 0, streak: 0, hours: 0, tasksDone: 0,
-                        avatarUrl: this.state.regAvatarUrl, mentorMessages: [], performance: {}, generatedSchedule: [], flashcards: [], dailyCardLimit: 10, rawEdital: '', createdAt: new Date().toISOString()
+                        avatarUrl: this.state.regAvatarUrl, mentorMessages: [], performance: {}, generatedSchedule: [], flashcards: [], dailyCardLimit: 10, rawEdital: '', studyHistory: [], createdAt: new Date().toISOString()
                     });
                 } catch(err) {
                     console.error(err);
@@ -624,13 +624,35 @@
             addNewBlock: function() { this.state.parsedBlocks.unshift({ id: 'b_' + Date.now(), discipline: 'NOVA DISCIPLINA', content: '1 Novo Assunto' }); this.render(); },
             updateParsedBlock: function(id, field, value) { const block = this.state.parsedBlocks.find(b => b.id === id); if(block) block[field] = value; },
 
-            deleteStudentSchedule: async function(studentId) {
+            // --- FUNÇÃO MODIFICADA PARA PERGUNTAR E SALVAR O HISTÓRICO ---
+            deleteStudentSchedule: async function(studentId, keepHistory = false) {
                 if (this.state.confirmDeleteId === studentId) {
                     try {
+                        const isMentor = this.state.userData && this.state.userData.role === 'mentor';
+                        const targetUser = isMentor ? this.state.students.find(s=>s.id===studentId) : this.state.userData;
+                        
+                        let newHistory = targetUser.studyHistory || [];
+                        
+                        if (keepHistory && targetUser.generatedSchedule) {
+                            const completedTasks = targetUser.generatedSchedule.filter(t => t.completed);
+                            newHistory = [...newHistory, ...completedTasks];
+                        } else if (!keepHistory) {
+                            newHistory = [];
+                        }
+
                         // EXCLUÍDA A LIMPEZA DE FLASHCARDS AQUI PARA PRESERVAR OS CARDS CRIADOS MANUALMENTE PELO ALUNO
-                        await updateDoc(doc(db, 'users', studentId), { generatedSchedule: [], rawEdital: '', scheduleStatus: 'none' });
-                        this.state.parsedBlocks = null; this.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; this.state.confirmDeleteId = null;
-                        this.notify('Cronograma apagado para recriação. Seus flashcards foram mantidos!'); this.render();
+                        await updateDoc(doc(db, 'users', studentId), { 
+                            generatedSchedule: [], 
+                            rawEdital: '', 
+                            scheduleStatus: 'none',
+                            studyHistory: newHistory 
+                        });
+                        
+                        this.state.parsedBlocks = null; 
+                        this.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; 
+                        this.state.confirmDeleteId = null;
+                        this.notify(keepHistory ? 'Cronograma apagado. Progresso salvo para o próximo!' : 'Cronograma apagado para recriação. Seus flashcards foram mantidos!'); 
+                        this.render();
                     } catch(e) { this.notify('Erro ao excluir no Firebase.', true); }
                 } else {
                     this.state.confirmDeleteId = studentId; this.render();
@@ -668,12 +690,33 @@
                 const isIntensive = this.state.scheduleMode === 'intensive';
                 const startDate = new Date(this.state.scheduleStartDate + 'T00:00:00');
                 let result = { draft: [] };
+                
                 if (isIntensive) {
                     const endDate = new Date(this.state.scheduleEndDate + 'T23:59:59');
                     if (endDate < startDate) return this.notify("A data do fim deve ser maior que o início.", true);
                     result = this._generateIntensive(blocks, stu.schedule, startDate, endDate);
                 } else { result = this._generateFlexible(blocks, stu.schedule, startDate); }
+                
                 if(!result || result.draft.length === 0) return;
+
+                // --- NOVA LÓGICA: IDENTIFICAR E APLICAR HISTÓRICO DE ESTUDOS ---
+                if (stu.studyHistory && stu.studyHistory.length > 0) {
+                    let historyCopy = JSON.parse(JSON.stringify(stu.studyHistory));
+                    result.draft.forEach(task => {
+                        const matchIndex = historyCopy.findIndex(h => h.topic === task.topic && h.type === task.type);
+                        if (matchIndex !== -1) {
+                            task.completed = true;
+                            if (task.type === 'questoes') {
+                                task.qTotal = historyCopy[matchIndex].qTotal || 0;
+                                task.qCorrect = historyCopy[matchIndex].qCorrect || 0;
+                            }
+                            // Remove do histórico cópia para não aplicar em revisões repetidas caso não haja tantas no histórico
+                            historyCopy.splice(matchIndex, 1);
+                        }
+                    });
+                }
+                // --- FIM DA NOVA LÓGICA ---
+
                 try {
                     const status = isMentor ? 'approved' : 'pending';
                     await updateDoc(doc(db, 'users', studentId), {
@@ -944,7 +987,7 @@
                     if (stu.generatedSchedule && stu.generatedSchedule.length > 0) {
                         let deleteBtnHtml = '';
                         if (this.state.confirmDeleteId === stu.id) {
-                            deleteBtnHtml = `<div class="flex items-center gap-2 animate-fade-in bg-rose-950/80 p-1.5 md:p-2 rounded-xl border border-rose-500/50"><span class="text-white text-[10px] md:text-xs font-bold px-2 hidden sm:inline">Excluir tudo?</span><button onclick="window.App.deleteStudentSchedule('${stu.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 md:px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-[0_0_10px_rgba(225,29,72,0.4)] flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 md:w-4 md:h-4"></i> Sim</button><button onclick="window.App.state.confirmDeleteId = null; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors"><i data-lucide="x" class="w-3 h-3 md:w-4 md:h-4"></i></button></div>`;
+                            deleteBtnHtml = `<div class="flex items-center gap-2 animate-fade-in bg-rose-950/80 p-1.5 md:p-2 rounded-xl border border-rose-500/50 flex-wrap"><span class="text-white text-[10px] md:text-xs font-bold px-2 hidden lg:inline">Aproveitar os estudos concluídos?</span><button onclick="window.App.deleteStudentSchedule('${stu.id}', true)" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Sim, aproveitar</button><button onclick="window.App.deleteStudentSchedule('${stu.id}', false)" class="bg-rose-600 hover:bg-rose-500 text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors flex items-center gap-1"><i data-lucide="trash-2" class="w-3 h-3"></i> Não, apagar tudo</button><button onclick="window.App.state.confirmDeleteId = null; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors"><i data-lucide="x" class="w-3 h-3"></i></button></div>`;
                         } else {
                             deleteBtnHtml = `<div class="flex gap-2 w-full md:w-auto"><button onclick="window.App.editStudentSchedule('${stu.id}')" class="flex-1 md:flex-none bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-md" title="Mudar disciplinas e regerar do zero"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Refazer do Zero</button><button onclick="window.App.state.confirmDeleteId = '${stu.id}'; window.App.render();" class="flex-1 md:flex-none bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(225,29,72,0.4)]"><i data-lucide="trash-2" class="w-4 h-4"></i> Excluir Tudo</button></div>`;
                         }
@@ -1083,7 +1126,7 @@
                     if (u.generatedSchedule && u.generatedSchedule.length > 0) {
                         let deleteBtnHtml = '';
                         if (this.state.confirmDeleteId === u.id) {
-                            deleteBtnHtml = `<div class="flex items-center gap-2 animate-fade-in bg-rose-950/80 p-1.5 md:p-2 rounded-xl border border-rose-500/50"><span class="text-white text-[10px] md:text-xs font-bold px-2 hidden sm:inline">Excluir tudo?</span><button onclick="window.App.deleteStudentSchedule('${u.id}')" class="bg-rose-600 hover:bg-rose-50 text-white px-3 md:px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-[0_0_10px_rgba(225,29,72,0.4)] flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 md:w-4 md:h-4"></i> Sim</button><button onclick="window.App.state.confirmDeleteId = null; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors"><i data-lucide="x" class="w-3 h-3 md:w-4 md:h-4"></i></button></div>`;
+                            deleteBtnHtml = `<div class="flex items-center gap-2 animate-fade-in bg-rose-950/80 p-1.5 md:p-2 rounded-xl border border-rose-500/50 flex-wrap"><span class="text-white text-[10px] md:text-xs font-bold px-2 hidden lg:inline">Aproveitar os estudos concluídos?</span><button onclick="window.App.deleteStudentSchedule('${u.id}', true)" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Sim, aproveitar</button><button onclick="window.App.deleteStudentSchedule('${u.id}', false)" class="bg-rose-600 hover:bg-rose-500 text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors flex items-center gap-1"><i data-lucide="trash-2" class="w-3 h-3"></i> Não, apagar tudo</button><button onclick="window.App.state.confirmDeleteId = null; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors"><i data-lucide="x" class="w-3 h-3"></i></button></div>`;
                         } else {
                             deleteBtnHtml = `<div class="flex gap-2 w-full md:w-auto"><button onclick="window.App.editStudentSchedule('${u.id}')" class="flex-1 md:flex-none bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-md" title="Mudar disciplinas e regerar do zero"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Refazer do Zero</button><button onclick="window.App.state.confirmDeleteId = '${u.id}'; window.App.render();" class="flex-1 md:flex-none bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(225,29,72,0.4)]"><i data-lucide="trash-2" class="w-4 h-4"></i> Excluir Tudo</button></div>`;
                         }
