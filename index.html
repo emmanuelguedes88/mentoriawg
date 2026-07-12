@@ -102,7 +102,7 @@
                 scheduleEndDate: (() => { let d = new Date(); d.setDate(d.getDate()+30); return d.toISOString().split('T')[0]; })(),
                 confirmDeleteId: null, isCardFlipped: false, activeTimerId: null, activeTimerSeconds: 0, timerIntervalObj: null,
                 inlineEditingTaskId: null, inlineEditingTaskText: '', inlineEditingTaskDate: '', editingStrategyFor: null,
-                editingFlashcardId: null, editingFlashcardFront: '', editingFlashcardBack: ''
+                editingFlashcardId: null, editingFlashcardFront: '', editingFlashcardBack: '', appendMode: false
             },
             unsubs: [],
 
@@ -403,8 +403,12 @@
                         try { localStorage.removeItem('wg_s_em'); localStorage.removeItem('wg_s_pw'); } catch(err) {} 
                     }
                 } catch(err) { 
-                    console.error(err);
-                    this.state.authError = 'E-mail ou senha incorretos.'; 
+                    // Removido o log de erro do console para evitar poluição visual.
+                    if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+                        this.state.authError = 'E-mail ou senha incorretos. Se for novo, clique em Cadastre-se.'; 
+                    } else {
+                        this.state.authError = 'Erro ao tentar entrar. Verifique sua conexão.';
+                    }
                     if(btn) { btn.innerHTML = origTxt; btn.disabled = false; }
                     this.render(); 
                 }
@@ -572,9 +576,6 @@
                 setTimeout(() => { const el = document.getElementById('chat-end'); if(el) el.scrollIntoView(); }, 100);
             },
 
-            // -------------------------------------------------------------------------
-            // CÓDIGO DE CRONOGRAMA: ALUNO E MENTORA
-            // -------------------------------------------------------------------------
             setScheduleMode: function(mode) { this.state.scheduleMode = mode; this.render(); },
             setScheduleDate: function(field, val) { this.state[field] = val; },
             addEditalForm: function() { this.state.editalForms.push({ id: Date.now(), name: '', content: '' }); this.render(); },
@@ -624,7 +625,6 @@
             addNewBlock: function() { this.state.parsedBlocks.unshift({ id: 'b_' + Date.now(), discipline: 'NOVA DISCIPLINA', content: '1 Novo Assunto' }); this.render(); },
             updateParsedBlock: function(id, field, value) { const block = this.state.parsedBlocks.find(b => b.id === id); if(block) block[field] = value; },
 
-            // --- FUNÇÃO MODIFICADA PARA PERGUNTAR E SALVAR O HISTÓRICO ---
             deleteStudentSchedule: async function(studentId, keepHistory = false) {
                 if (this.state.confirmDeleteId === studentId) {
                     try {
@@ -640,7 +640,6 @@
                             newHistory = [];
                         }
 
-                        // EXCLUÍDA A LIMPEZA DE FLASHCARDS AQUI PARA PRESERVAR OS CARDS CRIADOS MANUALMENTE PELO ALUNO
                         await updateDoc(doc(db, 'users', studentId), { 
                             generatedSchedule: [], 
                             rawEdital: '', 
@@ -651,6 +650,7 @@
                         this.state.parsedBlocks = null; 
                         this.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; 
                         this.state.confirmDeleteId = null;
+                        this.state.appendMode = false;
                         this.notify(keepHistory ? 'Cronograma apagado. Progresso salvo para o próximo!' : 'Cronograma apagado para recriação. Seus flashcards foram mantidos!'); 
                         this.render();
                     } catch(e) { this.notify('Erro ao excluir no Firebase.', true); }
@@ -672,6 +672,7 @@
                 } else { this.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; }
                 this.state.parsedBlocks = null;
                 this.state.editingStrategyFor = studentId;
+                this.state.appendMode = false;
                 this.notify('Modo de edição ativado. Role para baixo para alterar a estratégia ou use os ícones de lápis nas missões.');
                 this.render();
             },
@@ -699,7 +700,6 @@
                 
                 if(!result || result.draft.length === 0) return;
 
-                // --- NOVA LÓGICA: IDENTIFICAR E APLICAR HISTÓRICO DE ESTUDOS ---
                 if (stu.studyHistory && stu.studyHistory.length > 0) {
                     let historyCopy = JSON.parse(JSON.stringify(stu.studyHistory));
                     result.draft.forEach(task => {
@@ -710,12 +710,10 @@
                                 task.qTotal = historyCopy[matchIndex].qTotal || 0;
                                 task.qCorrect = historyCopy[matchIndex].qCorrect || 0;
                             }
-                            // Remove do histórico cópia para não aplicar em revisões repetidas caso não haja tantas no histórico
                             historyCopy.splice(matchIndex, 1);
                         }
                     });
                 }
-                // --- FIM DA NOVA LÓGICA ---
 
                 try {
                     const status = isMentor ? 'approved' : 'pending';
@@ -724,13 +722,87 @@
                         rawEdital: "Cronograma Estruturado Gerado.", scheduleStatus: status, savedEditalForms: this.state.editalForms,
                         savedScheduleMode: this.state.scheduleMode, savedScheduleStartDate: this.state.scheduleStartDate, savedScheduleEndDate: this.state.scheduleEndDate
                     });
-                    this.state.parsedBlocks = null; this.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; this.state.editingStrategyFor = null; 
+                    this.state.parsedBlocks = null; this.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; this.state.editingStrategyFor = null; this.state.appendMode = false;
                     if (isMentor) this.notify("Cronograma APROVADO e gerado com sucesso!"); else this.notify("Cronograma gerado! Aguardando aprovação da Mentora.");
                     this.render();
                 } catch(e) { console.error(e); this.notify("Erro ao salvar o cronograma.", true); }
             },
 
-            // --- GERAÇÃO SEM FLASHCARDS AUTOMÁTICOS ---
+            finalizeAppendedSchedule: async function(studentId) {
+                const u = this.state.userData;
+                const blocks = this.state.parsedBlocks;
+                if(!blocks || blocks.length === 0) return this.notify('Não há blocos para gerar.', true);
+
+                // Usa o generateFlexible com a data de hoje temporariamente
+                let result = this._generateFlexible(blocks, u.schedule, new Date());
+                if(!result || result.draft.length === 0) return;
+
+                let newTasks = result.draft;
+                let currentSchedule = [...(u.generatedSchedule || [])];
+                
+                let completed = currentSchedule.filter(t => t.completed);
+                let incompleteOld = currentSchedule.filter(t => !t.completed);
+
+                // Identifica a data máxima existente no cronograma ativo não finalizado
+                let maxDateStr = new Date().toISOString().split('T')[0];
+                if (incompleteOld.length > 0) {
+                    maxDateStr = incompleteOld.reduce((max, t) => t.date > max ? t.date : max, incompleteOld[0].date);
+                }
+                
+                // O acréscimo vai começar a preencher vagas estritamente DEPOIS do último dia existente
+                let currDate = new Date(maxDateStr + 'T00:00:00');
+                const keys = ['dom','seg','ter','qua','qui','sex','sab'];
+                let scheduleConfig = u.schedule || { seg: 4, ter: 4, qua: 4, qui: 4, sex: 4, sab: 6, dom: 0 };
+                
+                const advanceToValidDay = (d) => { 
+                    let dCopy = new Date(d); let count = 0; 
+                    while((scheduleConfig[keys[dCopy.getDay()]] || 0) === 0 && count < 14) { 
+                        dCopy.setDate(dCopy.getDate() + 1); count++; 
+                    } 
+                    return dCopy; 
+                };
+                
+                // Pula para o dia seguinte ao último dia do cronograma atual
+                currDate.setDate(currDate.getDate() + 1);
+                currDate = advanceToValidDay(currDate);
+
+                let incIdx = 0; let safety = 0;
+                while(incIdx < newTasks.length && safety < 1000) {
+                    safety++; let dayKey = keys[currDate.getDay()]; let slots = Math.floor(scheduleConfig[dayKey] || 0);
+                    for(let i=0; i<slots && incIdx < newTasks.length; i++) { 
+                        const offset = currDate.getTimezoneOffset() * 60000; 
+                        newTasks[incIdx].date = (new Date(currDate.getTime() - offset)).toISOString().split('T')[0]; 
+                        incIdx++; 
+                    }
+                    currDate.setDate(currDate.getDate() + 1); currDate = advanceToValidDay(currDate);
+                }
+
+                // Junta os novos formulários enviados aos que já existiam salvos na conta do aluno
+                let newSavedForms = [...(u.savedEditalForms || [])];
+                this.state.editalForms.forEach(f => {
+                    if(f.name.trim() && f.content.trim()) newSavedForms.push(f);
+                });
+
+                let finalSchedule = [...completed, ...incompleteOld, ...newTasks];
+
+                try {
+                    await updateDoc(doc(db, 'users', studentId), { 
+                        generatedSchedule: finalSchedule,
+                        scheduleStatus: 'pending', // Volta para aprovação da mentora
+                        savedEditalForms: newSavedForms
+                    });
+                    
+                    this.state.parsedBlocks = null; 
+                    this.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; 
+                    this.state.appendMode = false;
+                    this.notify("Novas disciplinas acrescentadas! O cronograma voltou para análise da Mentora."); 
+                    this.render();
+                } catch(e) { 
+                    console.error(e); 
+                    this.notify("Erro ao acrescentar disciplinas.", true); 
+                }
+            },
+
             _generateFlexible: function(rawBlocks, scheduleConfig, baseDate) {
                 let draft = []; let scheduledTasks = []; let unstudied = {};
                 rawBlocks.forEach(b => { if (!unstudied[b.discipline]) unstudied[b.discipline] = []; unstudied[b.discipline].push(b); });
@@ -1040,7 +1112,7 @@
                                             <textarea onchange="window.App.state.editingFlashcardBack = this.value" class="w-full glass-input rounded-lg p-2 text-sm h-16 outline-none custom-scrollbar border-blue-500/30">${this.state.editingFlashcardBack}</textarea>
                                             <div class="flex gap-2 justify-end mt-2">
                                                 <button onclick="window.App.cancelEditFlashcard()" class="px-3 py-1.5 bg-slate-600 text-white rounded-lg text-xs font-bold hover:bg-slate-500 transition-colors">Cancelar</button>
-                                                <button onclick="window.App.saveEditFlashcard('${c.id}')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-500 flex items-center gap-1 transition-colors"><i data-lucide="save" class="w-3 h-3"></i> Salvar Alteração</button>
+                                                <button onclick="window.App.saveEditFlashcard('${c.id}')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-50 flex items-center gap-1 transition-colors"><i data-lucide="save" class="w-3 h-3"></i> Salvar Alteração</button>
                                             </div>
                                         </div>`;
                                     }
@@ -1136,7 +1208,20 @@
                         const endDateStr = this.formatDateBR(lastTask.date);
 
                         activeScheduleHtml = `${pendingWarning}<div class="bg-emerald-900/20 border border-emerald-500/30 p-4 md:p-5 rounded-xl md:rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 mb-4"><div class="flex items-center gap-3"><i data-lucide="check-circle-2" class="text-emerald-400"></i><div><span class="text-emerald-300 font-bold text-sm md:text-base">Cronograma ${u.scheduleStatus === 'pending' ? 'em Análise' : 'Ativo'}</span><p class="text-[10px] md:text-xs text-emerald-400 mt-0.5 font-medium flex items-center gap-1"><i data-lucide="calendar-check" class="w-3 h-3"></i> Término previsto: ${endDateStr}</p></div></div>${deleteBtnHtml}</div><div class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2 mt-4 bg-black/20 p-2 rounded-xl border border-white/5">${u.generatedSchedule.map(t => this._renderTaskRow(t)).join('')}</div><div class="mt-6 flex justify-end"><button onclick="window.App.readjustSchedule(event)" class="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 shadow-lg"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Reajustar Atrasos</button></div>`;
+                        
+                        if (!this.state.appendMode) {
+                            activeScheduleHtml += `<div class="mt-6 flex flex-col md:flex-row justify-between items-center bg-violet-900/20 p-4 rounded-xl border border-violet-500/30 gap-4"><div><h4 class="text-violet-300 font-bold text-sm md:text-base">Adicionar mais disciplinas?</h4><p class="text-xs text-violet-400">Você pode acrescentar novos conteúdos ao cronograma ativo.</p></div><button onclick="window.App.state.appendMode = true; window.App.state.editalForms = [{ id: Date.now(), name: '', content: '' }]; window.App.state.parsedBlocks = null; window.App.render();" class="w-full md:w-auto bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 shadow-lg transition-colors"><i data-lucide="plus" class="w-4 h-4"></i> Acrescentar</button></div>`;
+                        }
+                        
                         draftHtml = activeScheduleHtml;
+
+                        if (this.state.appendMode) {
+                            if (this.state.parsedBlocks) {
+                                draftHtml += `<div class="bg-slate-900/80 border border-violet-500/30 p-4 md:p-6 rounded-xl md:rounded-2xl animate-fade-in shadow-[0_0_30px_rgba(139,92,246,0.1)] mt-6"><div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/10 pb-4"><div><h4 class="text-white font-bold text-lg">Revisão Final dos Blocos (Acréscimo)</h4><p class="text-slate-400 text-xs mt-1">Esses blocos serão adicionados ao final do seu cronograma atual.</p></div><button onclick="window.App.addNewBlock()" class="bg-violet-600 hover:bg-violet-500 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white transition-colors flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4 inline"></i> Novo Bloco</button></div><div class="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">${this.state.parsedBlocks.map((b, i) => `<div class="bg-slate-800/80 border border-slate-600 rounded-xl p-4 flex flex-col gap-3 relative shadow-md hover:border-violet-500 transition-colors"><div class="flex justify-between items-center"><input type="text" class="w-2/3 bg-transparent border-b border-slate-500 focus:border-cyan-400 py-1 text-sm font-bold text-cyan-300 uppercase outline-none transition-colors" value="${b.discipline}" onchange="window.App.updateParsedBlock('${b.id}', 'discipline', this.value)"/><button onclick="window.App.removeParsedBlock('${b.id}')" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/20 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div><textarea class="w-full bg-slate-900 border border-slate-700 text-slate-200 p-3 rounded-lg text-sm leading-relaxed custom-scrollbar h-24 outline-none focus:border-violet-500 transition-colors" onchange="window.App.updateParsedBlock('${b.id}', 'content', this.value)">${b.content}</textarea></div>`).join('')}</div><div class="flex flex-col md:flex-row gap-3 mt-6 pt-6 border-t border-white/10"><button onclick="window.App.state.parsedBlocks = null; window.App.render()" class="bg-slate-800 text-slate-300 px-6 py-3.5 rounded-xl font-bold hover:bg-slate-700 hover:text-white transition-colors text-sm md:text-base">Voltar</button><button onclick="window.App.finalizeAppendedSchedule('${u.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors"><i data-lucide="send" class="w-5 h-5"></i> Enviar Acréscimo para Aprovação</button></div></div>`;
+                            } else {
+                                draftHtml += `<div class="bg-slate-900/60 p-4 md:p-6 rounded-2xl border border-white/5 shadow-lg mt-6 animate-fade-in"><div class="flex justify-between items-center mb-4"><h3 class="text-white font-bold text-lg">Acrescentar Disciplinas</h3><div class="flex gap-2"><button onclick="window.App.state.appendMode = false; window.App.render();" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-colors">Cancelar</button><button onclick="window.App.addEditalForm()" class="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-colors">+ Disciplina</button></div></div><div class="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2 mb-6">${this.state.editalForms.map((f, idx) => `<div class="bg-black/40 border border-white/10 rounded-xl p-4 relative group animate-fade-in">${this.state.editalForms.length > 1 ? `<button type="button" onclick="window.App.removeEditalForm(${f.id})" class="absolute top-4 right-4 text-rose-500 hover:bg-rose-500/20 p-1.5 rounded-md transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}<input type="text" class="w-full md:w-3/4 bg-transparent border-b border-slate-600 focus:border-cyan-400 text-cyan-300 font-bold uppercase text-sm md:text-base py-1 outline-none mb-3 transition-colors placeholder-slate-600" placeholder="NOVA DISCIPLINA" value="${f.name}" onchange="window.App.updateEditalForm(${f.id}, 'name', this.value)"/><textarea class="w-full glass-input rounded-xl p-3 text-sm h-32 custom-scrollbar leading-relaxed outline-none focus:border-violet-500 transition-colors placeholder-slate-500" placeholder="Tópicos da nova disciplina..." onchange="window.App.updateEditalForm(${f.id}, 'content', this.value)">${f.content}</textarea></div>`).join('')}</div><button onclick="window.App.processEditalForms()" class="w-full py-4 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold text-sm md:text-base transition-colors flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(139,92,246,0.4)]"><i data-lucide="sparkles" class="w-5 h-5"></i> Preparar Acréscimo</button></div>`;
+                            }
+                        }
                     } else {
                         if (this.state.parsedBlocks) {
                             draftHtml = `<div class="bg-slate-900/80 border border-violet-500/30 p-4 md:p-6 rounded-xl md:rounded-2xl animate-fade-in shadow-[0_0_30px_rgba(139,92,246,0.1)]"><div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/10 pb-4"><div><h4 class="text-white font-bold text-lg">Revisão Final dos Blocos</h4><p class="text-slate-400 text-xs mt-1">Aqui estão os tópicos divididos. Você pode editá-los antes de enviar para aprovação da mentora.</p></div><button onclick="window.App.addNewBlock()" class="bg-violet-600 hover:bg-violet-500 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white transition-colors shadow-lg flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4"></i> Inserir Bloco Adicional</button></div><div class="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2" id="blocks-editor-list">${this.state.parsedBlocks.map((b, i) => `<div class="bg-slate-800/80 border border-slate-600 rounded-xl p-4 flex flex-col gap-3 relative shadow-md hover:border-violet-500 transition-colors"><div class="flex justify-between items-center"><input type="text" class="w-2/3 bg-transparent border-b border-slate-500 focus:border-cyan-400 py-1 text-sm font-bold text-cyan-300 uppercase outline-none transition-colors" value="${b.discipline}" onchange="window.App.updateParsedBlock('${b.id}', 'discipline', this.value)"/><button onclick="window.App.removeParsedBlock('${b.id}')" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/20 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div><textarea class="w-full bg-slate-900 border border-slate-700 text-slate-200 p-3 rounded-lg text-sm leading-relaxed custom-scrollbar h-24 outline-none focus:border-violet-500 transition-colors" onchange="window.App.updateParsedBlock('${b.id}', 'content', this.value)">${b.content}</textarea></div>`).join('')}</div><div class="flex flex-col md:flex-row gap-3 mt-6 pt-6 border-t border-white/10"><button onclick="window.App.state.parsedBlocks = null; window.App.render()" class="bg-slate-800 text-slate-300 px-6 py-3.5 rounded-xl font-bold hover:bg-slate-700 hover:text-white transition-colors text-sm md:text-base">Voltar para Edição</button><button onclick="window.App.finalizeSchedule('${u.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm md:text-base"><i data-lucide="send" class="w-5 h-5"></i> Enviar para Aprovação</button></div></div>`;
@@ -1162,7 +1247,6 @@
                         srsHtml = `<div class="perspective-1000 w-full max-w-lg mx-auto h-[350px]"><div class="relative w-full h-full transform-style-3d ${this.state.isCardFlipped ? 'rotate-y-180' : ''}"><div class="absolute inset-0 backface-hidden bg-slate-800 border-2 border-violet-500/50 rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-[0_0_30px_rgba(139,92,246,0.2)] cursor-pointer" onclick="window.App.flipCard()"><p class="text-slate-400 text-xs font-bold uppercase tracking-widest absolute top-6">Frente - Pergunta</p><div class="flex-1 flex items-center justify-center overflow-y-auto w-full custom-scrollbar py-6 mt-4"><p class="text-white text-lg md:text-xl font-medium whitespace-pre-wrap">${card.front}</p></div><p class="text-violet-400 text-xs mt-4 animate-pulse">Toque para ver a resposta</p></div><div class="absolute inset-0 backface-hidden rotate-y-180 bg-slate-800 border-2 border-emerald-500/50 rounded-3xl p-6 md:p-8 flex flex-col items-center justify-center text-center shadow-[0_0_30px_rgba(16,185,129,0.2)]"><p class="text-slate-400 text-xs font-bold uppercase tracking-widest absolute top-6">Verso - Resposta</p><div class="flex-1 flex items-center justify-center overflow-y-auto w-full custom-scrollbar py-8"><p class="text-white text-sm md:text-base font-medium whitespace-pre-wrap">${card.back}</p></div><div class="w-full grid grid-cols-3 gap-2 mt-4"><button onclick="window.App.srsAnswer('${card.id}', 0)" class="bg-rose-500/20 text-rose-400 border border-rose-500/50 hover:bg-rose-500 hover:text-white py-2 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-colors">Errei</button><button onclick="window.App.srsAnswer('${card.id}', 1)" class="bg-amber-500/20 text-amber-400 border border-amber-500/50 hover:bg-amber-500 hover:text-white py-2 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-colors">Bom</button><button onclick="window.App.srsAnswer('${card.id}', 2)" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500 hover:text-white py-2 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-colors">Fácil</button></div></div></div></div><p class="text-center text-slate-400 text-sm mt-6 font-bold">Restam: <span class="text-violet-400">${cardsToday.length}</span> cards criados por você hoje</p>`;
                     }
 
-                    // --- ADIÇÃO: LISTA DE FLASHCARDS DO ALUNO (COM OPÇÃO DE EDITAR/EXCLUIR) ---
                     let studentFlashcardsHtml = '';
                     if (cards.length > 0) {
                         studentFlashcardsHtml = `
@@ -1227,10 +1311,10 @@
                 let iconTask = t.type === 'teoria' ? 'book-open' : t.type === 'revisao' ? 'refresh-cw' : t.type === 'questoes' ? 'swords' : 'target';
 
                 if (this.state.inlineEditingTaskId === t.id) {
-                    return `<div class="bg-slate-800 p-3 rounded-xl border border-blue-500/50 flex flex-col gap-2 shadow-lg mb-3 animate-fade-in"><label class="text-[10px] text-slate-400 font-bold uppercase">Data da Missão</label><input type="date" value="${this.state.inlineEditingTaskDate}" onchange="window.App.state.inlineEditingTaskDate = this.value" class="glass-input rounded-lg px-2 py-1.5 text-xs w-full md:w-auto mb-1 border-blue-500/30" /><label class="text-[10px] text-slate-400 font-bold uppercase">Texto da Missão</label><textarea onchange="window.App.state.inlineEditingTaskText = this.value" class="w-full glass-input rounded-lg p-2 text-sm h-16 outline-none custom-scrollbar border-blue-500/30">${this.state.inlineEditingTaskText}</textarea><div class="flex gap-2 justify-end mt-2"><button onclick="window.App.cancelInlineEdit()" class="px-3 py-1.5 bg-slate-600 text-white rounded-lg text-xs font-bold hover:bg-slate-500 transition-colors">Cancelar</button><button onclick="window.App.saveInlineEdit('${t.id}', '${u.id}')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-500 flex items-center gap-1 transition-colors"><i data-lucide="save" class="w-3 h-3"></i> Salvar</button></div></div>`;
+                    return `<div class="bg-slate-800 p-3 rounded-xl border border-blue-500/50 flex flex-col gap-2 shadow-lg mb-3 animate-fade-in"><label class="text-[10px] text-slate-400 font-bold uppercase">Data da Missão</label><input type="date" value="${this.state.inlineEditingTaskDate}" onchange="window.App.state.inlineEditingTaskDate = this.value" class="glass-input rounded-lg px-2 py-1.5 text-xs w-full md:w-auto mb-1 border-blue-500/30" /><label class="text-[10px] text-slate-400 font-bold uppercase">Texto da Missão</label><textarea onchange="window.App.state.inlineEditingTaskText = this.value" class="w-full glass-input rounded-lg p-2 text-sm h-16 outline-none custom-scrollbar border-blue-500/30">${this.state.inlineEditingTaskText}</textarea><div class="flex gap-2 justify-end mt-2"><button onclick="window.App.cancelInlineEdit()" class="px-3 py-1.5 bg-slate-600 text-white rounded-lg text-xs font-bold hover:bg-slate-500 transition-colors">Cancelar</button><button onclick="window.App.saveInlineEdit('${t.id}', '${u.id}')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-50 flex items-center gap-1 transition-colors"><i data-lucide="save" class="w-3 h-3"></i> Salvar</button></div></div>`;
                 }
 
-                return `<div class="p-4 md:p-5 rounded-xl border ${bgClass} ${opacity} transition-all relative group/task shadow-md hover:shadow-lg hover:border-${color}-500/50 mb-3 overflow-hidden"><div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between"><div class="flex items-start gap-3 w-full md:w-auto pr-8 md:pr-0"><button ${isPendingApproval ? 'disabled' : `onclick="window.App.toggleStudentTask('${t.id}')"`} class="mt-1.5 w-6 h-6 rounded-full border-2 ${isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500 hover:border-violet-400'} flex items-center justify-center flex-shrink-0 transition-colors ${isPendingApproval ? 'opacity-50 cursor-not-allowed' : ''}">${isCompleted ? '<i data-lucide="check" class="text-white w-4 h-4"></i>' : ''}</button><div class="flex-1"><div class="flex flex-wrap items-center gap-2 mb-1.5"><span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-${color}-400 bg-${color}-500/10 px-2 py-0.5 rounded border border-${color}-500/20">${this.formatDateBR(t.date)}</span><span class="text-[10px] md:text-xs font-black text-${color}-200 bg-${color}-600/30 px-2 py-0.5 rounded-md border border-${color}-500/40 flex items-center gap-1"><i data-lucide="${iconTask}" class="w-3 h-3"></i> ${ludicLabel}</span><span class="text-[10px] md:text-xs text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1"><i data-lucide="hourglass" class="w-3 h-3"></i> ${t.duration || 60} min</span>${isQuestions && isCompleted ? `<span class="text-[10px] md:text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">${t.qCorrect}/${t.qTotal} Acertos</span>` : ''}</div><p class="text-white text-sm md:text-base font-bold leading-snug ${isCompleted ? 'line-through text-slate-500' : ''}">${cleanTopic}</p>${!isCompleted ? `<p class="text-[10px] md:text-xs text-slate-400 font-medium mt-1 flex items-center gap-1"><i data-lucide="info" class="w-3 h-3"></i> ${ludicDesc}</p>` : ''}</div></div><div class="flex items-center justify-end w-full md:w-auto gap-3 mt-2 md:mt-0">${timerHtml}</div></div>${questionsInputHtml}<button onclick="window.App.startInlineEdit('${t.id}', '${u.id}')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-400 p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 opacity-0 group-hover/task:opacity-100 transition-all focus:opacity-100 shadow-lg" title="Editar Missão"><i data-lucide="edit-2" class="w-4 h-4"></i></button></div>`;
+                return `<div class="p-4 md:p-5 rounded-xl border ${bgClass} ${opacity} transition-all relative group/task shadow-md hover:shadow-lg hover:border-${color}-500/50 mb-3 overflow-hidden"><div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between"><div class="flex items-start gap-3 w-full md:w-auto pr-8 md:pr-0"><button ${isPendingApproval ? 'disabled' : `onclick="window.App.toggleStudentTask('${t.id}')"`} class="mt-1.5 w-6 h-6 rounded-full border-2 ${isCompleted ? 'bg-emerald-500 border-emerald-500' : 'border-slate-500 hover:border-violet-400'} flex items-center justify-center flex-shrink-0 transition-colors ${isPendingApproval ? 'opacity-50 cursor-not-allowed' : ''}">${isCompleted ? '<i data-lucide="check" class="text-white w-4 h-4"></i>' : ''}</button><div class="flex-1"><div class="flex flex-wrap items-center gap-2 mb-1.5"><span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-${color}-400 bg-${color}-500/10 px-2 py-0.5 rounded border border-${color}-500/20">${this.formatDateBR(t.date)}</span><span class="text-[10px] md:text-xs font-black text-${color}-200 bg-${color}-600/30 px-2 py-0.5 rounded-md border border-${color}-500/40 flex items-center gap-1"><i data-lucide="${iconTask}" class="w-3 h-3"></i> ${ludicLabel}</span><span class="text-[10px] md:text-xs text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1"><i data-lucide="hourglass" class="w-3 h-3"></i> ${t.duration || 60} min</span>${isQuestions && isCompleted ? `<span class="text-[10px] md:text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">${t.qCorrect}/${t.qTotal} Acertos</span>` : ''}</div><p class="text-white text-sm md:text-base font-bold leading-snug ${isCompleted ? 'line-through text-slate-500' : ''}">${cleanTopic}</p>${!isCompleted ? `<p class="text-[10px] md:text-xs text-slate-400 font-medium mt-1 flex items-center gap-1"><i data-lucide="info" class="w-3 h-3"></i> ${ludicDesc}</p>` : ''}</div></div><div class="flex items-center justify-end w-full md:w-auto gap-3 mt-2 md:mt-0">${timerHtml}</div></div>${questionsInputHtml}<button onclick="window.App.startInlineEdit('${t.id}', '${u.id}')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-400 p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 opacity-100 transition-all shadow-lg" title="Editar Missão"><i data-lucide="edit-2" class="w-4 h-4"></i></button></div>`;
             }
         };
 
